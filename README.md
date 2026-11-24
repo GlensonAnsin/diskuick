@@ -107,7 +107,8 @@ the cache). It never touches your game files, and it only looks at the *names* o
 ### 🎨 Polished
 - Modern dark / light / system theme
 - English and Filipino
-- Optional on-screen **latency overlay** (can also show CPU and GPU load), `Ctrl+Alt+O` to toggle it
+- Optional on-screen **latency overlay** (can also show CPU, GPU load and FPS), `Ctrl+Alt+O` to toggle it
+- **Disk tab**: a WizTree-style space analyzer (folder tree, colour treemap, file types), a safe **disk cleanup** for temp files, caches and crash reports, and a restorable "move to Recycle Bin" for anything big you find
 - One-click **updates**, checksum-verified
 - Installer, portable build, start with Windows
 
@@ -298,6 +299,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 | `diskuick.py` | Engine: unbuffered reads, keep-alive thread, benchmark, CLI |
 | `controller.py` | Decides which drives to keep awake (games, drives, battery, focus) |
 | `games.py` | Steam / Epic / GOG game detection |
+| `diskscan.py`, `mftscan.py`, `cleanup.py`, `disk_ui.py` | Disk analyzer (folder walk, NTFS file-table scan, treemap layout), safe cleanup categories, and the Disk tab |
 | `health.py`, `lagcheck.py`, `sysmon.py`, `netcheck.py` | Drive health, the "why am I lagging" analysis, GPU/disk-user sampling, optional ping |
 | `adaptive.py`, `alerts.py`, `gamemode.py`, `hotkeys.py` | Smart intensity, drive alerts, game mode, global shortcuts |
 | `app_ui.py`, `widgets.py`, `overlay.py` | The window (CustomTkinter) and the optional overlay |
@@ -333,6 +335,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 - **Lag check** measures the network only if you set a host, and the GPU only where Windows exposes its GPU counters (it doesn't read GPU temperature or clocks). The "other programs using the drive" list is partial without admin rights, because Windows hides some processes.
 - **Overlay** doesn't show over exclusive-fullscreen games.
 - **FPS counter** (optional) needs Diskuick to run as administrator, because Windows only lets administrators read frame events.
+- **Disk analyzer**: when Diskuick runs as administrator on an NTFS drive it reads the file table (MFT) directly, which also sees protected folders and counts hard-linked files once; any problem falls back to a normal multi-threaded folder walk. On a fast SSD both take roughly 10-20 seconds for ~1 million files; the file table pays off more on slower or busy drives. Without admin rights, protected folders are skipped. **Disk cleanup** only removes fixed categories (temp files, caches, crash dumps, Recycle Bin). The analyzer can move one chosen file or folder to the Recycle Bin (restorable); Windows folders, drive roots and user profiles are refused.
 - **Game mode** only asks windows to close, so programs that live in the tray or ignore the request stay open.
 - **Filipino** translation is best-effort and would benefit from a native speaker's review (`i18n_fil.py`).
 

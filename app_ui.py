@@ -1,4 +1,4 @@
-"""Main Diskuick window: Dashboard / Games / Tools / Settings. Changes apply instantly."""
+"""Main Diskuick window: Dashboard / Games / Tools / Disk / Settings. Changes apply instantly."""
 import os
 import queue
 import threading
@@ -10,6 +10,7 @@ from PIL import ImageTk
 
 import config
 import diskuick as dk
+from disk_ui import DiskTab
 import gamemode
 import games as games_mod
 import health as health_mod
@@ -26,6 +27,7 @@ from widgets import (ACCENT, ACCENT_HOVER, BG, BORDER, CARD, DANGER, FIELD, FONT
                      btn_primary, btn_secondary, card, level_line, option_menu, segmented,
                      switch_row)
 
+TAB_KEYS = ["dashboard", "games", "tools", "disk", "settings"]
 PATTERN_LABELS = [("random", "Light"), ("seq", "Balanced"), ("heavy", "Heavy")]
 PATTERN_DESC = {
     "random": "Tiny random reads, about 10 per second. Least overhead - try this first.",
@@ -71,7 +73,7 @@ class MainWindow(ctk.CTkToplevel):
         self._build_header()
         self.banner = None
 
-        self.tab_names = [T("Dashboard"), T("Games"), T("Tools"), T("Settings")]
+        self.tab_names = [T("Dashboard"), T("Games"), T("Tools"), T("Disk"), T("Settings")]
         self.tabs = ctk.CTkTabview(
             self, fg_color="transparent", corner_radius=14, command=self._on_tab,
             segmented_button_fg_color=FIELD, segmented_button_selected_color=ACCENT,
@@ -85,9 +87,10 @@ class MainWindow(ctk.CTkToplevel):
         self._build_dashboard(self._scroll(frames[0]))
         self._build_games(self._scroll(frames[1]))
         self._build_tools(self._scroll(frames[2]))
-        self._build_settings(self._scroll(frames[3]))
+        self.disk = DiskTab(self, self._scroll(frames[3]))
+        self._build_settings(self._scroll(frames[4]))
         if tab:
-            self.tabs.set(self.tab_names[{"dashboard": 0, "games": 1, "tools": 2, "settings": 3}[tab]])
+            self.tabs.set(self.tab_names[TAB_KEYS.index(tab)])
         self._pump()
         self._tick()
         self._on_tab()  # load health right away if the Tools tab was pre-selected
@@ -126,12 +129,12 @@ class MainWindow(ctk.CTkToplevel):
     def _close(self):
         self._tune_cancel.set()
         self._lag_cancel.set()
+        self.disk.cancel()
         self.destroy()
 
     def current_key(self) -> str:
-        keys = ["dashboard", "games", "tools", "settings"]
         try:
-            return keys[self.tab_names.index(self.tabs.get())]
+            return TAB_KEYS[self.tab_names.index(self.tabs.get())]
         except (ValueError, AttributeError):
             return "dashboard"
 

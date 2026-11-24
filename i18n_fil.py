@@ -164,3 +164,76 @@ FIL.update({
     "That program is protected and can't be closed.": "Protektado ang programang iyon at hindi maisasara.",
     "Reopen them afterwards": "Buksan muli pagkatapos",
 })
+
+FIL.update({
+    "Disk": "Disk", "Drive to analyze": "Drive na susuriin", "Scan": "I-scan", "Stop": "Ihinto",
+    "Stopping...": "Hinihinto...", "Up": "Pataas", "Name": "Pangalan", "Size": "Laki", "Files": "Mga file",
+    "% of parent": "% ng parent", "Open in Explorer": "Buksan sa Explorer",
+    "Open this folder here": "Buksan ang folder na ito dito",
+    "Disk space analyzer": "Taga-suri ng espasyo sa disk",
+    "Shows what is taking up space, biggest first. It reads folders one by one, so a big drive takes a minute "
+    "or two. Nothing is changed or deleted here.":
+        "Ipinapakita kung ano ang kumakain ng espasyo, pinakamalaki muna. Isa-isang binabasa ang mga folder, kaya "
+        "isa hanggang dalawang minuto ang malaking drive. Walang binabago o binubura rito.",
+    "Press Scan to start.": "Pindutin ang I-scan para magsimula.",
+    "Scan a drive to see its map here.": "Mag-scan ng drive para makita ang mapa nito rito.",
+    "Scanning {drive}: ...": "Sina-scan ang {drive}: ...",
+    "Scanning {drive}: {files} files, {size} so far": "Sina-scan ang {drive}: {files} file, {size} pa lang",
+    "Found {size} in {files} files and {folders} folders.":
+        "Nakita ang {size} sa {files} file at {folders} folder.",
+    "Drive used: {used}.": "Gamit na sa drive: {used}.",
+    "Stopped early, so this is partial.": "Huminto nang maaga, kaya hindi kumpleto ito.",
+    "Some folders are protected; run as administrator to include them.":
+        "May mga protektadong folder; patakbuhin bilang administrator para maisama ang mga ito.",
+    "File types": "Mga uri ng file",
+    "Which kinds of files use the most space on this drive.": "Anong mga uri ng file ang pinakamalaki sa drive na ito.",
+    "Disk cleanup": "Paglilinis ng disk",
+    "Removes only safe, regenerable leftovers: temporary files, caches and crash reports. Your own files are "
+    "never touched. Tick what you want, check the sizes, then clean.":
+        "Ligtas at nabubuo-muling tira lang ang inaalis: temporary file, cache at crash report. Hindi ginagalaw ang "
+        "sarili mong mga file. Piliin ang gusto mo, tingnan ang laki, saka maglinis.",
+    "Check sizes": "Tingnan ang laki", "Checking sizes...": "Tinitingnan ang laki...",
+    "Clean selected": "Linisin ang napili", "Cleaning...": "Naglilinis...",
+    "Tick at least one item first.": "Pumili muna ng kahit isa.",
+    "Ticked items would free about {size}.": "Makakapagbakante ang mga napili ng mga {size}.",
+    "The Recycle Bin is emptied permanently.": "Permanenteng iwawalan ng laman ang Recycle Bin.",
+    "Remove about {size} from:\n\n{names}{note}\n\nContinue?":
+        "Aalisin ang mga {size} mula sa:\n\n{names}{note}\n\nIpagpatuloy?",
+    "Freed {size} ({files} files). Items in use were skipped.":
+        "Nabakante ang {size} ({files} file). Nilaktawan ang mga ginagamit pa.",
+    # cleanup categories
+    "Temporary files": "Mga temporary file",
+    "Left behind by programs in your Temp folder.": "Naiwan ng mga programa sa iyong Temp folder.",
+    "Windows temporary files": "Mga temporary file ng Windows",
+    "Windows' own Temp folder. Run as admin to clear all of it.":
+        "Mismong Temp folder ng Windows. Patakbuhin bilang admin para malinis lahat.",
+    "Thumbnail cache": "Cache ng thumbnail",
+    "Explorer rebuilds the picture previews when needed.": "Binubuo ulit ng Explorer ang mga preview kapag kailangan.",
+    "Crash dumps and error reports": "Mga crash dump at error report",
+    "Diagnostic files from programs that crashed.": "Mga diagnostic file mula sa mga programang nag-crash.",
+    "Browser caches": "Mga cache ng browser",
+    "Chrome, Edge and Brave caches. Sites load a little slower once.":
+        "Mga cache ng Chrome, Edge at Brave. Medyo babagal nang minsan ang pag-load ng mga site.",
+    "Shader caches": "Mga cache ng shader",
+    "GPU shader caches. Games may stutter briefly the next time they start while these are rebuilt.":
+        "Mga cache ng shader ng GPU. Maaaring mag-stutter sandali ang mga laro sa susunod na bukas habang binubuo ito.",
+    "Recycle Bin": "Recycle Bin",
+    "Permanently deletes what is in the Recycle Bin.": "Permanenteng binubura ang laman ng Recycle Bin.",
+})
+
+FIL.update({
+    "Move to Recycle Bin": "Ilipat sa Recycle Bin", "folder": "folder", "file": "file",
+    "Move this {kind} to the Recycle Bin?\n\n{path}\n{size}\n\nYou can restore it from the Recycle Bin.":
+        "Ilipat ang {kind} na ito sa Recycle Bin?\n\n{path}\n{size}\n\nMaibabalik mo ito mula sa Recycle Bin.",
+    "Moving to the Recycle Bin...": "Inililipat sa Recycle Bin...",
+    "Could not move it to the Recycle Bin (in use, protected or cancelled).":
+        "Hindi mailipat sa Recycle Bin (ginagamit, protektado o kinansela).",
+    "Moved {size} to the Recycle Bin. Scan again to refresh the file types.":
+        "Nailipat ang {size} sa Recycle Bin. Mag-scan ulit para ma-refresh ang mga uri ng file.",
+})
+
+FIL.update({
+    "Fast scan (NTFS file table).": "Mabilis na scan (NTFS file table).",
+    "Run Diskuick as administrator for a much faster scan.":
+        "Patakbuhin ang Diskuick bilang administrator para sa mas mabilis na scan.",
+})

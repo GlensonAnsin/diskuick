@@ -12,7 +12,8 @@ import i18n
 import i18n_fil  # noqa: F401
 
 # strings that are intentionally not translated (identical in Filipino or brand/technical)
-SAME_OK = {"Dashboard", "Error", "Drive", "Default", "Keep-alive", "avg ms", "p95 ms", "max ms", "default"}
+SAME_OK = {"Dashboard", "Error", "Drive", "Default", "Keep-alive", "avg ms", "p95 ms", "max ms", "default",
+           "Disk", "Recycle Bin", "folder", "file"}
 # dynamic strings that reach T() through variables (controller/health text, pattern labels)
 EXTRA = ["Light", "Balanced", "Heavy", "Active", "Waiting", "Off", "Disabled", "Idle", "Starting",
          "Paused while on battery", "Choose a drive in Settings", "Add games in the Games tab",
@@ -24,7 +25,10 @@ EXTRA = ["Light", "Balanced", "Heavy", "Active", "Waiting", "Off", "Disabled", "
 
 def ui_strings():
     out = set(EXTRA)
-    for f in ("app_ui.py", "widgets.py", "diskuick_tray.py"):
+    import cleanup
+    for c in cleanup.categories():   # category names reach T() through variables
+        out.update((c.title, c.hint))
+    for f in ("app_ui.py", "widgets.py", "diskuick_tray.py", "disk_ui.py"):
         with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
             tree = ast.parse(fh.read())
         for n in ast.walk(tree):
