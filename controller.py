@@ -136,6 +136,10 @@ class Controller(threading.Thread):
         with self._lock:
             return sorted(self.kas)
 
+    def running_games(self) -> list[str]:
+        """Exe names of the configured games that are running right now."""
+        return sorted(self._prev_games)
+
     def history(self, drive: str) -> list:
         with self._lock:
             ka = self.kas.get(drive)

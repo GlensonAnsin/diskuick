@@ -26,6 +26,7 @@ from app_ui import MainWindow
 from controller import Controller
 from i18n import T
 from logo import render_logo
+from fps import FpsMonitor, format_fps
 from overlay import Overlay
 import stats as stats_mod
 from stats import Stats
@@ -85,6 +86,7 @@ class App:
         self.overlay = Overlay(self.root)
         self.ctrl = Controller(self.cfg, self.stats, self._on_status, self._on_event)
         self.gpu = sysmon.GpuMonitor()
+        self.fps = FpsMonitor()
         self.ctrl.gpu_source = lambda: self.gpu.latest
         self.hotkeys: hotkeys.Hotkeys | None = None
         self.icon = pystray.Icon(APP, make_icon("off"), APP, self._menu())
@@ -146,6 +148,18 @@ class App:
                 if self.gpu.latest is not None:
                     parts.append(f"GPU {self.gpu.latest:.0f}%")
                 extra = "  ".join(parts)
+            games = self.ctrl.running_games()
+            self.fps.track(games[0] if self.cfg["overlay_fps"] and self.cfg["overlay"] and games else None)
+            if self.cfg["overlay_fps"] and games:
+                if not self.fps.available:
+                    fps_line = "FPS  n/a (PresentMon.exe missing)"
+                elif not is_admin():
+                    fps_line = "FPS  n/a (run as admin)"
+                elif self.fps.error:
+                    fps_line = "FPS  n/a"
+                else:
+                    fps_line = format_fps(self.fps.fps())
+                extra = f"{fps_line}\n{extra}" if extra else fps_line
             self.overlay.update(self.cfg["overlay"], self.cfg["overlay_corner"], self.ctrl, extra)
         except Exception:
             self.overlay.hide()
@@ -246,6 +260,7 @@ class App:
     def _quit(self):
         self.ctrl.shutdown()
         self.gpu.stop()
+        self.fps.stop()
         if self.hotkeys is not None:
             self.hotkeys.stop()
         self.icon.stop()

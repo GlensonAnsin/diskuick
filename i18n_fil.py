@@ -141,6 +141,9 @@ FIL.update({
         "Minamarkahan ng Ctrl+Alt+L ang sandali ng lag. Ipinapakita o itinatago ng Ctrl+Alt+O ang overlay.",
     "Show overlay while the drive is kept awake": "Ipakita ang overlay habang gising ang drive",
     "Also show CPU and GPU load": "Ipakita rin ang load ng CPU at GPU",
+    "Also show FPS": "Ipakita rin ang FPS",
+    "Needs PresentMon.exe next to Diskuick.exe and Diskuick running as administrator.":
+        "Kailangan ng PresentMon.exe sa tabi ng Diskuick.exe at ng Diskuick na tumatakbo bilang administrator.",
     "Network check (optional)": "Pagsusuri ng network (opsyonal)",
     "Adds ping and packet loss to the Lag check and lag marks. Type a server you play on, or any host such as "
     "1.1.1.1. Diskuick only opens a normal connection to it, a few times a second during a check. Leave empty "

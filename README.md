@@ -332,6 +332,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 - **Game detection** picks the largest non-installer `.exe` in a game folder, which is a best guess; fix it in the Games tab if a game doesn't trigger.
 - **Lag check** measures the network only if you set a host, and the GPU only where Windows exposes its GPU counters (it doesn't read GPU temperature or clocks). The "other programs using the drive" list is partial without admin rights, because Windows hides some processes.
 - **Overlay** doesn't show over exclusive-fullscreen games.
+- **FPS counter** (optional) needs Diskuick to run as administrator, because Windows only lets administrators read frame events.
 - **Game mode** only asks windows to close, so programs that live in the tray or ignore the request stay open.
 - **Filipino** translation is best-effort and would benefit from a native speaker's review (`i18n_fil.py`).
 
@@ -340,6 +341,12 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 ## 📄 License
 
 Released under the [MIT License](LICENSE). Copyright © 2026 GlensonAnsin.
+
+### Third-party software
+
+Diskuick ships [PresentMon](https://github.com/GameTechDev/PresentMon) (`PresentMon.exe`), used for the overlay's
+optional FPS counter. Copyright (C) 2017-2024 Intel Corporation, released under the
+[MIT License](https://github.com/GameTechDev/PresentMon/blob/main/LICENSE.txt).
 
 <div align="center">
 

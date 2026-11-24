@@ -14,6 +14,23 @@ if (-not $SkipTests) {
     if ($LASTEXITCODE -ne 0) { Write-Error "Tests failed - not building."; exit 1 }
 }
 
+# PresentMon (MIT, Intel) measures the FPS shown in the overlay. It is downloaded once into vendor\ (not committed)
+# and shipped next to Diskuick.exe. Set $presentMonSha256 to the hash printed on the first build to pin it.
+$presentMonVersion = "2.6.0"
+$presentMonSha256 = "b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af"
+$presentMon = "vendor\PresentMon.exe"
+if (-not (Test-Path $presentMon)) {
+    New-Item -ItemType Directory -Force vendor | Out-Null
+    $url = "https://github.com/GameTechDev/PresentMon/releases/download/v$presentMonVersion/PresentMon-$presentMonVersion-x64.exe"
+    Invoke-WebRequest $url -OutFile $presentMon
+}
+$hash = (Get-FileHash $presentMon -Algorithm SHA256).Hash.ToLower()
+if ($presentMonSha256 -and $hash -ne $presentMonSha256.ToLower()) {
+    Remove-Item $presentMon
+    Write-Error "PresentMon hash mismatch ($hash) - deleted it, not building."; exit 1
+}
+if (-not $presentMonSha256) { Write-Host "PresentMon.exe sha256: $hash  (pin it in build.ps1 `$presentMonSha256)" }
+
 $version = (& $py -c "from version import VERSION; print(VERSION)").Trim()
 & $py make_icon.py
 & $py -m PyInstaller --noconfirm --clean --onefile --noconsole `
@@ -30,14 +47,14 @@ if ($env:DISKUICK_SIGN_PFX) {
 
 $zip = "dist\Diskuick-portable-$version.zip"
 if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path dist\Diskuick.exe, README.md -DestinationPath $zip
+Compress-Archive -Path dist\Diskuick.exe, $presentMon, README.md -DestinationPath $zip
 
 $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $iscc) {
     $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
               "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
-if (Test-Path $iscc) {
+if ($iscc -and (Test-Path $iscc)) {
     & $iscc "/DAppVersion=$version" installer.iss
 } else { Write-Host "Inno Setup not found - skipped installer (install it from jrsoftware.org to build one)." }
 

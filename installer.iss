@@ -32,6 +32,8 @@ Name: "startup"; Description: "Start Diskuick when I sign in to Windows"; Flags:
 
 [Files]
 Source: "dist\Diskuick.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Intel PresentMon (MIT), used for the overlay's FPS counter. Fetched by build.ps1 into vendor\.
+Source: "vendor\PresentMon.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Diskuick"; Filename: "{app}\Diskuick.exe"

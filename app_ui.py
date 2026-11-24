@@ -808,6 +808,10 @@ class MainWindow(ctk.CTkToplevel):
         self.v_extra = ctk.BooleanVar(value=c["overlay_extra"])
         switch_row(o, T("Also show CPU and GPU load"), None, self.v_extra,
                    lambda: self.app.apply({"overlay_extra": self.v_extra.get()}))
+        self.v_fps = ctk.BooleanVar(value=c["overlay_fps"])
+        switch_row(o, T("Also show FPS"),
+                   T("Needs PresentMon.exe next to Diskuick.exe and Diskuick running as administrator."),
+                   self.v_fps, lambda: self.app.apply({"overlay_fps": self.v_fps.get()}))
         orow = ctk.CTkFrame(o, fg_color="transparent")
         orow.pack(fill="x", padx=16, pady=(0, 14))
         corners = {"top-left": T("Top left"), "top-right": T("Top right"),

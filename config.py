@@ -26,7 +26,8 @@ DEFAULTS = {
     "alerts": True,              # tell me when the game drive is nearly full / unhealthy
     "hotkeys": True,             # Ctrl+Alt+L marks a lag moment, Ctrl+Alt+O toggles the overlay
     "overlay_extra": False,      # also show CPU/GPU load in the overlay
-    "net_host": "",              # optional host[:port] for the network check; empty = off
+    "overlay_fps": False,        # also show the game's FPS (needs PresentMon.exe and administrator rights)
+    "net_host": "",             # optional host[:port] for the network check; empty = off
     "game_close": [],            # programs to close politely while a game runs (exe names)
     "game_restore": True,        # reopen those programs when the game closes
 }
