@@ -15,6 +15,7 @@ so it never falls asleep right when a game needs data.
 [![Python](https://img.shields.io/badge/built%20with-Python%203.12-3776AB?style=flat-square&logo=python&logoColor=white)](#)
 [![Release](https://img.shields.io/github/v/release/GlensonAnsin/diskuick?style=flat-square&color=2ECC71&label=release)](https://github.com/GlensonAnsin/diskuick/releases/latest)
 [![Read only](https://img.shields.io/badge/disk%20access-read--only-2ECC71?style=flat-square)](#-faq)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 <br>
 
@@ -301,6 +302,10 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 - **Filipino** translation is best-effort and would benefit from a native speaker's review (`i18n_fil.py`).
 
 <br>
+
+## 📄 License
+
+Released under the [MIT License](LICENSE). Copyright © 2026 GlensonAnsin.
 
 <div align="center">
 
