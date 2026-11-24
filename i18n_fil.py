@@ -48,7 +48,7 @@ FIL.update({
         "Hula lang ang pangalan ng programa - suriin ito kung hindi gumana ang isang laro.",
     "Select all": "Piliin lahat", "Add selected": "Idagdag ang napili", "Close": "Isara",
     # tools
-    "Drive to inspect": "Drive na susuriin", "Refresh": "I-refresh", "Reading drive info...": "Binabasa ang impormasyon ng drive...",
+    "Drive to inspect": "Drive na susuriin", "Refresh": "I-refresh", "Restart as administrator": "I-restart bilang administrator", "Reading drive info...": "Binabasa ang impormasyon ng drive...",
     "What Windows knows about this drive, with plain-language advice.":
         "Ang alam ng Windows tungkol sa drive na ito, kasama ang simpleng payo.",
     "Health": "Kalusugan", "Temperature": "Temperatura", "Wear": "Pagkasira", "Powered on": "Oras na bukas",
@@ -70,7 +70,7 @@ FIL.update({
     "Start lag check": "Simulan ang pagsusuri ng lag",
     "Starting in {s}s - switch to your game now…": "Magsisimula sa {s}s - lumipat na sa laro mo…",
     "Measuring… keep playing": "Sumusukat… ituloy ang paglalaro",
-    "Indicative only - GPU and network aren't measured.": "Pahiwatig lang - hindi nasusukat ang GPU at network.",
+    "Indicative only - network isn't measured.": "Pahiwatig lang - hindi nasusukat ang network.",
     # settings
     "Only while gaming": "Habang naglalaro lang", "Always on": "Laging naka-on",
     "Starts automatically when one of your games opens and stops when it closes. Add games in the Games tab.":
@@ -102,8 +102,8 @@ FIL.update({
     "Open data folder": "Buksan ang folder ng datos", "Open stall log": "Buksan ang log ng pagtigil",
     # overlay
     "Latency overlay": "Overlay ng latency",
-    "A small live readout in a screen corner while a game runs. It's a separate window that never touches the game, and shows over windowed and borderless games (not exclusive fullscreen).":
-        "Maliit na live na pagbasa sa sulok ng screen habang may tumatakbong laro. Hiwalay itong window na hindi ginagalaw ang laro, at lumalabas sa windowed at borderless na laro (hindi sa exclusive fullscreen).",
+    "A small live readout in a screen corner while the drive is being kept awake (a game is running, or Always on). It's a separate window that never touches the game, and shows over windowed and borderless games (not exclusive fullscreen).":
+        "Maliit na live na pagbasa sa sulok ng screen habang pinapanatiling gising ang drive (may tumatakbong laro, o naka-Always on). Hiwalay itong window na hindi ginagalaw ang laro, at lumalabas sa windowed at borderless na laro (hindi sa exclusive fullscreen).",
     "Show overlay while a game runs": "Ipakita ang overlay habang may laro", "Position": "Posisyon", "Preview": "Pasilip",
     "Top left": "Kaliwang itaas", "Top right": "Kanang itaas", "Bottom left": "Kaliwang ibaba", "Bottom right": "Kanang ibaba",
     # updates
@@ -114,4 +114,50 @@ FIL.update({
     # tray
     "Open Diskuick": "Buksan ang Diskuick", "Quit": "Isara", "Keeping drive {d}: awake": "Pinapanatiling gising ang drive {d}:",
     "Could not change startup setting": "Hindi mabago ang setting ng pagsisimula",
+    # 1.3 features (best-effort)
+    "Last sessions": "Mga huling session",
+    "Was it the drive? A summary of your last play sessions.":
+        "Drive ba ang may sala? Buod ng mga huli mong session ng paglalaro.",
+    "No sessions recorded yet. A report appears when a game closes.":
+        "Wala pang naitalang session. May lalabas na ulat kapag nagsara ang laro.",
+    "Worst read": "Pinakamabagal na read", "stalls": "pagtigil", "peak": "pinakamataas", "ping": "ping",
+    "Lag marks": "Mga markang lag",
+    "Press Ctrl+Alt+L (or use the tray menu) the moment a game lags. Diskuick saves what the PC was doing right then.":
+        "Pindutin ang Ctrl+Alt+L (o gamitin ang tray menu) sa mismong oras na nag-lag ang laro. "
+        "Sine-save ng Diskuick ang ginagawa ng PC sa sandaling iyon.",
+    "No lag marked yet.": "Wala pang namarkahang lag.",
+    "Mark lag now": "Markahan ang lag ngayon", "Lag marked": "Namarkahan ang lag",
+    "Session ended": "Natapos ang session", "Closed to free resources": "Isinara para magkaroon ng espasyo",
+    "Smart intensity": "Matalinong lakas",
+    "Starts Light and steps up only while the drive keeps stalling, then steps back down when it's calm. "
+    "Ignores the choice above (a game's own setting still wins).":
+        "Nagsisimula sa Light at tumataas lang habang patuloy na tumitigil ang drive, saka bumababa kapag "
+        "kalmado na. Hindi pinapansin ang pinili sa itaas (mas mataas pa rin ang setting ng mismong laro).",
+    "Drive alerts": "Mga babala sa drive",
+    "Tell me when the game drive is nearly full or no longer healthy.":
+        "Sabihan ako kapag halos puno na ang drive ng laro o hindi na malusog.",
+    "Keyboard shortcuts": "Mga shortcut sa keyboard",
+    "Ctrl+Alt+L marks a lag moment. Ctrl+Alt+O shows or hides the overlay.":
+        "Minamarkahan ng Ctrl+Alt+L ang sandali ng lag. Ipinapakita o itinatago ng Ctrl+Alt+O ang overlay.",
+    "Show overlay while the drive is kept awake": "Ipakita ang overlay habang gising ang drive",
+    "Also show CPU and GPU load": "Ipakita rin ang load ng CPU at GPU",
+    "Network check (optional)": "Pagsusuri ng network (opsyonal)",
+    "Adds ping and packet loss to the Lag check and lag marks. Type a server you play on, or any host such as "
+    "1.1.1.1. Diskuick only opens a normal connection to it, a few times a second during a check. Leave empty "
+    "to keep it off.":
+        "Nagdaragdag ng ping at packet loss sa Lag check at mga markang lag. Mag-type ng server na nilalaro mo, "
+        "o anumang host tulad ng 1.1.1.1. Normal na koneksyon lang ang binubuksan ng Diskuick, ilang beses "
+        "bawat segundo habang may pagsusuri. Iwanang walang laman para patayin.",
+    "Host": "Host",
+    "Enter a host name or address, optionally with :port.":
+        "Maglagay ng pangalan o address ng host, maaaring may :port.",
+    "Game mode (optional)": "Game mode (opsyonal)",
+    "When one of your games starts, politely ask these programs to close (they can still ask you to save), and "
+    "reopen them when the game ends. Nothing is force-closed.":
+        "Kapag nagsimula ang isa sa mga laro mo, magalang na hihilingin sa mga programang ito na magsara "
+        "(maaari pa rin silang magtanong kung ise-save), at bubuksan muli pagkatapos ng laro. "
+        "Walang pwersahang isinasara.",
+    "No programs chosen.": "Walang napiling programa.", "Remove": "Alisin",
+    "That program is protected and can't be closed.": "Protektado ang programang iyon at hindi maisasara.",
+    "Reopen them afterwards": "Buksan muli pagkatapos",
 })

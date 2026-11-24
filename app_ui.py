@@ -10,9 +10,11 @@ from PIL import ImageTk
 
 import config
 import diskuick as dk
+import gamemode
 import games as games_mod
 import health as health_mod
 import lagcheck as lag_mod
+import netcheck
 import stats as stats_mod
 import sysutil
 import updater
@@ -274,6 +276,18 @@ class MainWindow(ctk.CTkToplevel):
         self.stall_box = ctk.CTkFrame(s, fg_color="transparent")
         self.stall_box.pack(fill="x", padx=16, pady=(6, 12))
 
+        r = card(body, T("Last sessions"), T("Was it the drive? A summary of your last play sessions."))
+        self.sess_box = ctk.CTkFrame(r, fg_color="transparent")
+        self.sess_box.pack(fill="x", padx=16, pady=(6, 12))
+        self._sess_sig = None
+
+        m = card(body, T("Lag marks"),
+                 T("Press Ctrl+Alt+L (or use the tray menu) the moment a game lags. Diskuick saves what "
+                   "the PC was doing right then."))
+        self.mark_box = ctk.CTkFrame(m, fg_color="transparent")
+        self.mark_box.pack(fill="x", padx=16, pady=(6, 12))
+        self._mark_sig = None
+
     def _refresh_dashboard(self):
         ctrl, st = self.app.ctrl, self.app.stats
         state, text = ctrl.state, ctrl.text
@@ -317,6 +331,53 @@ class MainWindow(ctk.CTkToplevel):
             for ts, drv, ms in recent:
                 ctk.CTkLabel(self.stall_box, text=f"{stats_mod.fmt_clock(ts)}    {drv}:    {ms:.0f} ms",
                              font=("Consolas", 12), text_color=TEXT, anchor="w").pack(anchor="w")
+
+        self._refresh_reports()
+
+    def _refresh_reports(self):
+        st = self.app.stats
+        reports, marks = st.recent_reports(3), st.recent_marks(3)
+        rsig = tuple(r["end"] for r in reports)
+        if rsig != self._sess_sig:
+            self._sess_sig = rsig
+            self._clear(self.sess_box)
+            if not reports:
+                ctk.CTkLabel(self.sess_box, text=T("No sessions recorded yet. A report appears when a game closes."),
+                             font=(FONT, 12), text_color=MUTED, wraplength=500, justify="left",
+                             anchor="w").pack(anchor="w")
+            for r in reports:
+                names = ", ".join(r["games"]) or f"{r['drive']}:"
+                when = time.strftime("%d %b %H:%M", time.localtime(r["start"]))
+                ctk.CTkLabel(self.sess_box, text=f"{when}   {names}   ·   {stats_mod.fmt_duration(r['seconds'])}",
+                             font=(FONT, 13, "bold"), text_color=TEXT, anchor="w").pack(fill="x", pady=(6, 0))
+                level_line(self.sess_box, r["verdict"]["level"], T(r["verdict"]["text"]))
+                bits = [f"{T('Worst read')} {r['worst_ms']:.0f} ms", f"{r['stalls']} {T('stalls')}",
+                        f"CPU {r['cpu_avg']:.0f}%"]
+                if r.get("gpu_avg") is not None:
+                    bits.append(f"GPU {r['gpu_avg']:.0f}%")
+                bits.append(f"RAM {T('peak')} {r['ram_peak']:.0f}%")
+                ctk.CTkLabel(self.sess_box, text="   ·   ".join(bits), font=(FONT, 11), text_color=MUTED,
+                             anchor="w").pack(fill="x", padx=(0, 0))
+        msig = tuple(m["ts"] for m in marks)
+        if msig != self._mark_sig:
+            self._mark_sig = msig
+            self._clear(self.mark_box)
+            if not marks:
+                ctk.CTkLabel(self.mark_box, text=T("No lag marked yet."), font=(FONT, 12),
+                             text_color=MUTED).pack(anchor="w")
+            for m in marks:
+                ctk.CTkLabel(self.mark_box, text=stats_mod.fmt_clock(m["ts"]), font=("Consolas", 12, "bold"),
+                             text_color=TEXT, anchor="w").pack(fill="x", pady=(6, 0))
+                level_line(self.mark_box, m["verdict"]["level"], T(m["verdict"]["text"]))
+                bits = [f"{d}: {v:.0f} ms" for d, v in m.get("drives", {}).items() if v is not None]
+                bits.append(f"CPU {m['cpu']:.0f}%")
+                if m.get("gpu") is not None:
+                    bits.append(f"GPU {m['gpu']:.0f}%")
+                bits.append(f"RAM {m['ram']:.0f}%")
+                if m.get("net_ms") is not None:
+                    bits.append(f"{T('ping')} {m['net_ms']:.0f} ms")
+                ctk.CTkLabel(self.mark_box, text="   ·   ".join(bits), font=(FONT, 11), text_color=MUTED,
+                             anchor="w").pack(fill="x")
 
     def _tick(self):
         if not self.winfo_exists():
@@ -521,6 +582,9 @@ class MainWindow(ctk.CTkToplevel):
                 font=(FONT, 11), text_color=MUTED, anchor="w").pack(fill="x", padx=16, pady=(2, 6))
         for lv, msg in health_mod.health_tips(info):
             level_line(self.h_box, lv, T(msg))
+        if None in (info["temp"], info["wear"], info["hours"]) and not self.app.is_admin():
+            btn_secondary(self.h_box, T("Restart as administrator"), self.app.restart_as_admin,
+                          width=200, height=30).pack(anchor="w", padx=16, pady=(6, 0))
 
     # auto-tune
     def _run_tune(self):
@@ -544,9 +608,16 @@ class MainWindow(ctk.CTkToplevel):
             rows, err = None, None
             ctrl.suspend(letter)
             try:
-                path = dk.ensure_probe(letter, self.cfg["size_mb"])
-                time.sleep(1.0)
-                rows = dk.run_bench(path, reads=14, gap=2.0, progress=progress, cancel=self._tune_cancel)
+                for attempt in (1, 2):
+                    path = dk.ensure_probe(letter, self.cfg["size_mb"])
+                    time.sleep(1.0)
+                    try:
+                        rows = dk.run_bench(path, reads=14, gap=2.0, progress=progress,
+                                            cancel=self._tune_cancel)
+                        break
+                    except OSError:
+                        if attempt == 2 or os.path.exists(path):
+                            raise  # only retry when the probe file vanished underneath us
             except Exception as e:
                 err = str(e)
             finally:
@@ -627,7 +698,7 @@ class MainWindow(ctk.CTkToplevel):
                 self.post(lambda: self.lag_status.configure(text=T("Measuring… keep playing")))
                 try:
                     res = lag_mod.run_lagcheck(letter, 30, on_tick=lambda f: self.post(lambda: self.lag_bar.set(f)),
-                                               cancel=self._lag_cancel)
+                                               cancel=self._lag_cancel, net_host=self.cfg["net_host"])
                 except Exception as e:
                     res = {"findings": [("bad", f"{T('Test failed')}: {e}")]}
             self.post(lambda: self._lag_done(res))
@@ -647,7 +718,8 @@ class MainWindow(ctk.CTkToplevel):
             return
         for lv, msg in res["findings"]:
             level_line(self.lag_box, lv, msg)
-        ctk.CTkLabel(self.lag_box, text=T("Indicative only - GPU and network aren't measured."),
+        note = "Indicative only." if res.get("net") else "Indicative only - network isn't measured."
+        ctk.CTkLabel(self.lag_box, text=T(note),
                      font=(FONT, 11), text_color=MUTED).pack(anchor="w", padx=16, pady=(6, 0))
 
     # -------------------------------------------------------- settings ------
@@ -683,6 +755,11 @@ class MainWindow(ctk.CTkToplevel):
         self.int_desc = ctk.CTkLabel(i, text="", font=(FONT, 12), text_color=MUTED, anchor="w",
                                      justify="left", wraplength=500)
         self.int_desc.pack(fill="x", padx=16)
+        self.v_adapt = ctk.BooleanVar(value=c["adaptive"])
+        switch_row(i, T("Smart intensity"),
+                   T("Starts Light and steps up only while the drive keeps stalling, then steps back down "
+                     "when it's calm. Ignores the choice above (a game's own setting still wins)."),
+                   self.v_adapt, lambda: self.app.apply({"adaptive": self.v_adapt.get()}))
         adv = ctk.CTkFrame(i, fg_color="transparent")
         adv.pack(fill="x", padx=16, pady=(8, 4))
         ctk.CTkLabel(adv, text=T("Seconds between reads (advanced)"), font=(FONT, 12), text_color=MUTED).pack(side="left")
@@ -709,18 +786,28 @@ class MainWindow(ctk.CTkToplevel):
                    self.v_focus, lambda: self.app.apply({"only_when_focused": self.v_focus.get()}))
         switch_row(b, T("Notify when a game starts"), T("A small tray notification."),
                    self.v_notify, lambda: self.app.apply({"notify": self.v_notify.get()}))
+        self.v_alerts = ctk.BooleanVar(value=c["alerts"])
+        self.v_keys = ctk.BooleanVar(value=c["hotkeys"])
+        switch_row(b, T("Drive alerts"), T("Tell me when the game drive is nearly full or no longer healthy."),
+                   self.v_alerts, lambda: self.app.apply({"alerts": self.v_alerts.get()}))
+        switch_row(b, T("Keyboard shortcuts"),
+                   T("Ctrl+Alt+L marks a lag moment. Ctrl+Alt+O shows or hides the overlay."),
+                   self.v_keys, lambda: self.app.apply({"hotkeys": self.v_keys.get()}))
         switch_row(b, T("Start with Windows"), T("Runs quietly in the tray at login."),
                    self.v_auto, lambda: self.app.set_autostart(self.v_auto.get()))
         ctk.CTkFrame(b, fg_color="transparent", height=6).pack()
 
         # overlay
         o = card(body, T("Latency overlay"),
-                 T("A small live readout in a screen corner while a game runs. It's a separate window "
-                   "that never touches the game, and shows over windowed and borderless games (not "
-                   "exclusive fullscreen)."))
+                 T("A small live readout in a screen corner while the drive is being kept awake (a game is "
+                   "running, or Always on). It's a separate window that never touches the game, and shows "
+                   "over windowed and borderless games (not exclusive fullscreen)."))
         self.v_overlay = ctk.BooleanVar(value=c["overlay"])
-        switch_row(o, T("Show overlay while a game runs"), None, self.v_overlay,
+        switch_row(o, T("Show overlay while the drive is kept awake"), None, self.v_overlay,
                    lambda: self.app.apply({"overlay": self.v_overlay.get()}))
+        self.v_extra = ctk.BooleanVar(value=c["overlay_extra"])
+        switch_row(o, T("Also show CPU and GPU load"), None, self.v_extra,
+                   lambda: self.app.apply({"overlay_extra": self.v_extra.get()}))
         orow = ctk.CTkFrame(o, fg_color="transparent")
         orow.pack(fill="x", padx=16, pady=(0, 14))
         corners = {"top-left": T("Top left"), "top-right": T("Top right"),
@@ -731,6 +818,39 @@ class MainWindow(ctk.CTkToplevel):
         option_menu(orow, self.corner_var, list(corners.values()), width=140, height=32,
                     command=lambda v: self.app.apply({"overlay_corner": next(k for k, t in corners.items() if t == v)})
                     ).pack(side="right", padx=(0, 8))
+
+        # network check
+        n = card(body, T("Network check (optional)"),
+                 T("Adds ping and packet loss to the Lag check and lag marks. Type a server you play on, or any "
+                   "host such as 1.1.1.1. Diskuick only opens a normal connection to it, a few times a second "
+                   "during a check. Leave empty to keep it off."))
+        nrow = ctk.CTkFrame(n, fg_color="transparent")
+        nrow.pack(fill="x", padx=16, pady=(8, 2))
+        ctk.CTkLabel(nrow, text=T("Host"), font=(FONT, 13), text_color=TEXT).pack(side="left")
+        self.net_entry = ctk.CTkEntry(nrow, width=240, height=32, fg_color=FIELD, border_color=BORDER,
+                                      corner_radius=8, placeholder_text="host[:port]")
+        self.net_entry.pack(side="right")
+        if c["net_host"]:
+            self.net_entry.insert(0, c["net_host"])
+        for ev in ("<Return>", "<FocusOut>"):
+            self.net_entry.bind(ev, lambda _e: self._net_changed())
+        self.net_err = ctk.CTkLabel(n, text="", font=(FONT, 11), text_color=DANGER, anchor="w")
+        self.net_err.pack(fill="x", padx=16, pady=(0, 10))
+
+        # game mode
+        gm = card(body, T("Game mode (optional)"),
+                  T("When one of your games starts, politely ask these programs to close (they can still ask "
+                    "you to save), and reopen them when the game ends. Nothing is force-closed."))
+        self.gm_box = ctk.CTkFrame(gm, fg_color="transparent")
+        self.gm_box.pack(fill="x", padx=16, pady=(6, 0))
+        self.gm_err = ctk.CTkLabel(gm, text="", font=(FONT, 11), text_color=DANGER, anchor="w")
+        self.gm_err.pack(fill="x", padx=16)
+        btn_secondary(gm, T("Add running program…"), lambda: ProcessPicker(self, self._gm_add),
+                      height=30).pack(anchor="w", padx=16, pady=(4, 6))
+        self.v_restore = ctk.BooleanVar(value=c["game_restore"])
+        switch_row(gm, T("Reopen them afterwards"), None, self.v_restore,
+                   lambda: self.app.apply({"game_restore": self.v_restore.get()}))
+        self._render_gm()
 
         # appearance
         a = card(body, T("Appearance"))
@@ -767,6 +887,41 @@ class MainWindow(ctk.CTkToplevel):
         if not UPDATE_REPO:
             self.upd_label.configure(text=T("Update checks are off until a release repository is set."))
             self.check_btn.configure(state="disabled")
+
+    def _net_changed(self):
+        raw = self.net_entry.get().strip()
+        if raw and netcheck.parse_target(raw) is None:
+            self.net_err.configure(text=T("Enter a host name or address, optionally with :port."))
+            return
+        self.net_err.configure(text="")
+        if raw != self.cfg["net_host"]:
+            self.app.apply({"net_host": raw})
+
+    def _render_gm(self):
+        self._clear(self.gm_box)
+        exes = self.cfg["game_close"]
+        if not exes:
+            ctk.CTkLabel(self.gm_box, text=T("No programs chosen."), font=(FONT, 12),
+                         text_color=MUTED).pack(anchor="w")
+        for e in exes:
+            row = ctk.CTkFrame(self.gm_box, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=e, font=(FONT, 13), text_color=TEXT).pack(side="left")
+            btn_ghost(row, T("Remove"), lambda e=e: self._gm_remove(e), width=70, height=26).pack(side="right")
+
+    def _gm_add(self, exe: str):
+        exe = exe.strip().lower()
+        if not gamemode.allowed(exe):
+            self.gm_err.configure(text=T("That program is protected and can't be closed."))
+            return
+        self.gm_err.configure(text="")
+        if exe not in self.cfg["game_close"]:
+            self.app.apply({"game_close": sorted(self.cfg["game_close"] + [exe])})
+        self._render_gm()
+
+    def _gm_remove(self, exe: str):
+        self.app.apply({"game_close": [e for e in self.cfg["game_close"] if e != exe]})
+        self._render_gm()
 
     def _open_log(self):
         if os.path.exists(stats_mod.LOG_PATH):

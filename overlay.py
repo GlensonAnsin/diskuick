@@ -83,17 +83,18 @@ class Overlay:
         self._preview_until = time.time() + seconds
 
     # -- called ~once a second on the UI thread
-    def update(self, enabled: bool, corner: str, ctrl):
+    def update(self, enabled: bool, corner: str, ctrl, extra: str = ""):
         previewing = time.time() < self._preview_until
         items = latency_items(ctrl) if enabled else []
         if previewing and not items:
             items = [("E", 0.6, False)]  # sample reading so the user can see position/size
+            extra = extra or ""
         if not items:
             self.hide()
             return
         if self.win is None or not self.win.winfo_exists():
             self._create()
-        self.label.configure(text=format_items(items),
+        self.label.configure(text=format_items(items) + (f"\n{extra}" if extra else ""),
                              fg=BAD if any(s for _, _, s in items) else OK)
         self.win.update_idletasks()
         w, h = self.win.winfo_reqwidth(), self.win.winfo_reqheight()

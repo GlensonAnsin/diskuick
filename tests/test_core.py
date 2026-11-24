@@ -6,6 +6,8 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Tests must never touch the real probe file of an installed/running Diskuick.
+os.environ["DISKUICK_PROBE_DIR"] = tempfile.mkdtemp(prefix="diskuick-test-")
 
 import config
 import controller
@@ -224,6 +226,27 @@ class LagcheckTests(unittest.TestCase):
     def test_no_counters(self):
         self.assertIn("warn", self.levels(None, [10], [10]))
 
+    GPU_CSV = ('"t","\\\\PC\\GPU Engine(pid_1_luid_0x0_0xA_phys_0_eng_0_engtype_3D)\\Utilization Percentage",'
+               '"\\\\PC\\GPU Engine(pid_2_luid_0x0_0xA_phys_0_eng_0_engtype_3D)\\Utilization Percentage",'
+               '"\\\\PC\\GPU Engine(pid_1_luid_0x0_0xA_phys_0_eng_3_engtype_VideoDecode)\\Utilization Percentage",'
+               '"\\\\PC\\GPU Engine(pid_1_luid_0x0_0xB_phys_0_eng_0_engtype_3D)\\Utilization Percentage"\n'
+               '"x","60","30","99","5"\n"x","80","40","99","5"\n')
+
+    def test_parse_gpu_sums_processes_ignores_video_picks_busiest_gpu(self):
+        # GPU A: 60+30=90, 80+40=120 -> capped at 100. VideoDecode ignored. GPU B only 5.
+        self.assertEqual(lagcheck.parse_gpu(self.GPU_CSV), [90.0, 100.0])
+        self.assertIsNone(lagcheck.parse_gpu(""))
+        self.assertIsNone(lagcheck.parse_gpu('"t","\\\\PC\\Processor(_Total)\\% Processor Time"\n"x","1"\n'))
+
+    def test_gpu_bound(self):
+        lv = [l for l, _ in lagcheck.analyze([2, 3], [20, 20], [40, 40], [99, 98])]
+        self.assertIn("bad", lv)
+
+    def test_gpu_fine_points_at_network(self):
+        msgs = [m for _, m in lagcheck.analyze([2, 3], [20, 20], [40, 40], [30, 40])]
+        self.assertTrue(any("GPU was fine" in m for m in msgs))
+        self.assertTrue(any("network" in m for m in msgs))
+
 
 class StatsTests(unittest.TestCase):
     def test_persist_and_log(self):
@@ -333,6 +356,7 @@ class IntegrationTests(unittest.TestCase):
 
     def test_bad_drive_reports_error(self):
         st = stats.Stats(os.path.join(tempfile.mkdtemp(), "s.json"), os.path.join(tempfile.mkdtemp(), "l"))
+        saved = os.environ.pop("DISKUICK_PROBE_DIR")  # needs a really missing drive, not a temp dir
         ctrl = controller.Controller(cfg(mode="always", always_drives=["Q"], size_mb=8), st)
         ctrl.start()
         try:
@@ -341,6 +365,7 @@ class IntegrationTests(unittest.TestCase):
         finally:
             ctrl.shutdown()
             ctrl.join(8)
+            os.environ["DISKUICK_PROBE_DIR"] = saved
 
 
 if __name__ == "__main__":

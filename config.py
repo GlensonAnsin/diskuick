@@ -22,6 +22,13 @@ DEFAULTS = {
     "theme": "system",           # system | dark | light
     "language": "en",            # en | fil
     "check_updates": True,       # only does anything if version.UPDATE_REPO is set
+    "adaptive": False,           # start Light, step up only while stalls continue (ignores default_pattern)
+    "alerts": True,              # tell me when the game drive is nearly full / unhealthy
+    "hotkeys": True,             # Ctrl+Alt+L marks a lag moment, Ctrl+Alt+O toggles the overlay
+    "overlay_extra": False,      # also show CPU/GPU load in the overlay
+    "net_host": "",              # optional host[:port] for the network check; empty = off
+    "game_close": [],            # programs to close politely while a game runs (exe names)
+    "game_restore": True,        # reopen those programs when the game closes
 }
 
 
@@ -54,6 +61,9 @@ def migrate(raw: dict) -> dict:
         cfg["overlay_corner"] = "top-right"
     if cfg["mode"] not in ("games", "always"):
         cfg["mode"] = "games"
+    cfg["game_close"] = sorted({str(e).strip().lower() for e in (cfg["game_close"] or [])
+                                if isinstance(e, str) and e.strip()})
+    cfg["net_host"] = str(cfg["net_host"] or "").strip()
     cfg["always_drives"] = sorted({str(d).upper()[:1] for d in cfg["always_drives"] if d})
     return cfg
 

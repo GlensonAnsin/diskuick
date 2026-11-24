@@ -4,6 +4,7 @@ import os
 import queue
 import sys
 import threading
+import time
 import winreg
 from tkinter import messagebox
 
@@ -11,8 +12,14 @@ import customtkinter as ctk
 import pystray
 from PIL import Image
 
+import psutil
+
 import config
+import hotkeys
 import i18n
+import lagcheck
+import netcheck
+import sysmon
 import i18n_fil  # noqa: F401  (registers the Filipino strings)
 import updater
 from app_ui import MainWindow
@@ -20,6 +27,7 @@ from controller import Controller
 from i18n import T
 from logo import render_logo
 from overlay import Overlay
+import stats as stats_mod
 from stats import Stats
 from version import APP_NAME, UPDATE_REPO, VERSION
 
@@ -76,9 +84,15 @@ class App:
         self.win = None
         self.overlay = Overlay(self.root)
         self.ctrl = Controller(self.cfg, self.stats, self._on_status, self._on_event)
+        self.gpu = sysmon.GpuMonitor()
+        self.ctrl.gpu_source = lambda: self.gpu.latest
+        self.hotkeys: hotkeys.Hotkeys | None = None
         self.icon = pystray.Icon(APP, make_icon("off"), APP, self._menu())
 
     # ---- settings API used by the window
+    def is_admin(self) -> bool:
+        return is_admin()
+
     def autostart_enabled(self) -> bool:
         return autostart_enabled()
 
@@ -93,6 +107,8 @@ class App:
         config.save(self.cfg)
         self.ctrl.update_cfg(self.cfg)
         rebuild = False
+        if "hotkeys" in updates:
+            self._sync_hotkeys()
         if "theme" in updates:
             ctk.set_appearance_mode(self.cfg["theme"])
             rebuild = True  # live theme switches leave stale corners; rebuild for a clean repaint
@@ -119,10 +135,64 @@ class App:
 
     def _overlay_tick(self):
         try:
-            self.overlay.update(self.cfg["overlay"], self.cfg["overlay_corner"], self.ctrl)
+            active = bool(self.ctrl.active_drives())
+            if active:
+                self.gpu.start()   # also feeds the session report; stops again when nothing is active
+            else:
+                self.gpu.stop()
+            extra = ""
+            if self.cfg["overlay_extra"] and active:
+                parts = [f"CPU {psutil.cpu_percent(interval=None):.0f}%"]
+                if self.gpu.latest is not None:
+                    parts.append(f"GPU {self.gpu.latest:.0f}%")
+                extra = "  ".join(parts)
+            self.overlay.update(self.cfg["overlay"], self.cfg["overlay_corner"], self.ctrl, extra)
         except Exception:
             self.overlay.hide()
         self.root.after(1000, self._overlay_tick)
+
+    # ---- hotkeys
+    def _sync_hotkeys(self):
+        if self.hotkeys is not None:
+            self.hotkeys.stop()
+            self.hotkeys = None
+        if self.cfg["hotkeys"]:
+            self.hotkeys = hotkeys.Hotkeys({1: self.mark_lag, 2: self._toggle_overlay})
+            self.hotkeys.start()
+
+    def _toggle_overlay(self):
+        def go():
+            on = not self.cfg["overlay"]
+            self.apply({"overlay": on})
+            try:
+                if self.win is not None and self.win.winfo_exists():
+                    self.win.v_overlay.set(on)
+            except Exception:
+                pass
+        self.ui(go)
+
+    def mark_lag(self):
+        """Snapshot of what the PC was doing the moment the user felt lag (hotkey or tray menu)."""
+        threading.Thread(target=self._mark_work, daemon=True).start()
+
+    def _mark_work(self):
+        now = time.time()
+        users = sysmon.DiskUsers()
+        users.snapshot()
+        drives = {d: max((h[1] for h in self.ctrl.history(d) if h[0] >= now - 10), default=None)
+                  for d in self.ctrl.active_drives()}
+        cpu = psutil.cpu_percent(interval=1.0)
+        ram = psutil.virtual_memory().percent
+        gpu = self.gpu.latest if self.gpu.latest is not None else sysmon.gpu_once()
+        target = netcheck.parse_target(self.cfg["net_host"])
+        mark = {"ts": now, "drives": drives, "cpu": cpu, "ram": ram, "gpu": gpu, "hogs": users.top(),
+                "net_checked": bool(target), "net_ms": netcheck.rtt_ms(*target) if target else None}
+        mark["verdict"] = lagcheck.mark_verdict(mark)
+        self.stats.add_mark(mark)
+        try:
+            self.icon.notify(T(mark["verdict"]["text"]), T("Lag marked"))
+        except Exception:
+            pass
 
     def open_window(self, tab: str | None = None, force_new: bool = False):
         w = self.win
@@ -141,6 +211,7 @@ class App:
             pystray.MenuItem(lambda _: self.ctrl.text, None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(T("Open Diskuick"), lambda: self.ui(self.open_window), default=True),
+            pystray.MenuItem(T("Mark lag now"), lambda: self.mark_lag()),
             pystray.MenuItem(T("Enabled"), lambda: self.apply({"enabled": not self.cfg["enabled"]}),
                              checked=lambda _: self.cfg["enabled"]),
             pystray.MenuItem(T("Start with Windows"),
@@ -159,14 +230,24 @@ class App:
             pass
 
     def _on_event(self, kind: str, g: dict):
-        if kind == "game_start":
-            try:
+        try:
+            if kind == "game_start":
                 self.icon.notify(T("Keeping drive {d}: awake").format(d=g["drive"]), g["name"])
-            except Exception:
-                pass
+            elif kind == "session_end" and self.cfg["notify"]:
+                title = T("Session ended") + f" · {stats_mod.fmt_duration(g['seconds'])}"
+                self.icon.notify(T(g["verdict"]["text"]), title)
+            elif kind == "alert" and self.cfg["alerts"]:
+                self.icon.notify(T(g["text"]), APP)
+            elif kind == "game_mode" and self.cfg["notify"]:
+                self.icon.notify(", ".join(g["closed"]), T("Closed to free resources"))
+        except Exception:
+            pass
 
     def _quit(self):
         self.ctrl.shutdown()
+        self.gpu.stop()
+        if self.hotkeys is not None:
+            self.hotkeys.stop()
         self.icon.stop()
         self.ui(self.overlay.hide)
         self.ui(self.root.quit)
@@ -185,6 +266,12 @@ class App:
         except Exception:
             pass
 
+    def restart_as_admin(self):
+        """Relaunches this app elevated (Windows shows its UAC prompt), then quits this copy."""
+        if not relaunch_as_admin():
+            return  # user declined the UAC prompt: keep running as normal
+        self._quit()
+
     def install_update(self, installer_path: str):
         """Runs the already-verified installer (it closes and relaunches us), then exits."""
         try:
@@ -197,12 +284,39 @@ class App:
     def run(self):
         self.icon.run_detached()
         self.ctrl.start()
+        self._sync_hotkeys()
         threading.Thread(target=self._check_updates, daemon=True).start()
         if self.first_run:
             self.ui(lambda: self.open_window("games"))
         self._pump()
         self._overlay_tick()
         self.root.mainloop()
+
+
+def is_admin() -> bool:
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def relaunch_as_admin() -> bool:
+    """Starts an elevated copy that waits for this process to exit. False if UAC was declined."""
+    if getattr(sys, "frozen", False):
+        exe, args = sys.executable, ""
+    else:
+        exe, args = sys.executable, f'"{os.path.abspath(sys.argv[0])}"'
+    args = f"{args} --wait-pid {os.getpid()}".strip()
+    rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, args, None, 1)
+    return rc > 32
+
+
+def _wait_for_pid(pid: int, timeout_ms: int = 15000):
+    k32 = ctypes.windll.kernel32
+    h = k32.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+    if h:
+        k32.WaitForSingleObject(h, timeout_ms)
+        k32.CloseHandle(h)
 
 
 def single_instance() -> bool:
@@ -216,6 +330,11 @@ def main():
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         pass
+    if "--wait-pid" in sys.argv:
+        try:
+            _wait_for_pid(int(sys.argv[sys.argv.index("--wait-pid") + 1]))
+        except (ValueError, IndexError):
+            pass
     if not single_instance():
         import tkinter as tk
         r = tk.Tk()

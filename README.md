@@ -73,6 +73,7 @@ the cache). It never touches your game files, and it only looks at the *names* o
 
 ### 🚀 Keep-alive engine
 - Three intensities: **Light**, **Balanced**, **Heavy**
+- **Smart intensity**: starts Light, steps up only while the drive keeps stalling, steps back down when calm
 - Starts and stops with your game, automatically
 - **Multi-drive** support and **per-game profiles**
 - Pause on battery, or only while the game is focused
@@ -83,8 +84,10 @@ the cache). It never touches your game files, and it only looks at the *names* o
 ### 🔍 Proves it works
 - **Benchmark & auto-tune** finds the lightest setting that actually helps *your* drive
 - **Live latency graph** with a red stall line
-- **Stall log** and session stats
-- **Lag check**: 30 s of real disk, CPU and RAM sampling with plain-language findings
+- **Stall log** and **session reports**: when a game closes, a plain answer to "was it the drive?"
+- **Lag marks**: press `Ctrl+Alt+L` the moment a game lags and Diskuick saves what the PC was doing
+- **Lag check**: 30 s of real disk, CPU, RAM and GPU sampling, plus optional network ping/loss, and which
+  other programs were hammering the drive
 
 </td>
 </tr>
@@ -94,8 +97,9 @@ the cache). It never touches your game files, and it only looks at the *names* o
 ### 🎮 Effortless setup
 - **Auto-detects games** from Steam, Epic Games and GOG
 - Or pick any running program with one click
-- Drive health, free-space and temperature tips
-- Tray notifications when a game starts
+- Drive health, free-space and temperature tips, with **alerts** when a drive is nearly full or unhealthy
+- Optional **game mode**: politely closes programs you choose while you play, reopens them afterwards
+- Tray notifications when a game starts or ends
 
 </td>
 <td width="50%" valign="top">
@@ -103,7 +107,7 @@ the cache). It never touches your game files, and it only looks at the *names* o
 ### 🎨 Polished
 - Modern dark / light / system theme
 - English and Filipino
-- Optional on-screen **latency overlay**
+- Optional on-screen **latency overlay** (can also show CPU and GPU load), `Ctrl+Alt+O` to toggle it
 - One-click **updates**, checksum-verified
 - Installer, portable build, start with Windows
 
@@ -187,6 +191,9 @@ Only to check GitHub for a newer release (you can turn this off in Settings). No
 is sent. Updates install only when you click **Update now**, only from GitHub's own HTTPS hosts, and only
 if the download matches the release's SHA-256 checksum.
 
+The one other case is the **optional network check**: if you type a host in Settings, the Lag check and lag
+marks open a normal TCP connection to it to time the ping. It's empty (off) by default.
+
 </details>
 
 <details>
@@ -196,8 +203,32 @@ if the download matches the release's SHA-256 checksum.
 
 Only if the cause is your drive waking from idle. Run **Tools → Run auto-tune**: if the *None* row shows
 slow first reads and a keep-alive row shows fast ones, it will help. If not, try the **Lag check** while
-playing: it tells you whether the disk, CPU or memory looks like the bottleneck (GPU and network aren't
+playing: it tells you whether the disk, CPU, memory or GPU looks like the bottleneck (network isn't
 measured).
+
+</details>
+
+<details>
+<summary><b>🎮 Is "game mode" safe? What does it close?</b></summary>
+
+<br>
+
+Only programs **you** add in Settings → Game mode, and only when one of your listed games starts. Diskuick
+asks their windows to close the same way clicking the X would, so a program with unsaved work can still show
+its "save changes?" prompt. Nothing is force-closed, system programs are on a built-in block list, and only
+programs that really closed are reopened when the game ends. If Diskuick itself quits mid-game, they are not
+reopened. It's off until you add a program.
+
+</details>
+
+<details>
+<summary><b>⌨️ What are the keyboard shortcuts?</b></summary>
+
+<br>
+
+`Ctrl+Alt+L` marks a lag moment (also in the tray menu: **Mark lag now**), and `Ctrl+Alt+O` shows or hides the
+overlay. They work while a game has focus and need no admin rights. Turn them off in Settings if another
+program uses the same keys.
 
 </details>
 
@@ -206,7 +237,7 @@ measured).
 
 <br>
 
-Settings, stats and the stall log live in `%APPDATA%\diskuick\`. Uninstall from **Windows Settings → Apps**
+Settings, stats, the stall log, session reports and lag marks live in `%APPDATA%\diskuick\`. Uninstall from **Windows Settings → Apps**
 (or the Start menu); it also removes that folder. For the portable build, delete the exe and, if you want,
 the `.diskuick` folder on each drive (or run `python diskuick.py clean D`).
 
@@ -267,7 +298,8 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 | `diskuick.py` | Engine: unbuffered reads, keep-alive thread, benchmark, CLI |
 | `controller.py` | Decides which drives to keep awake (games, drives, battery, focus) |
 | `games.py` | Steam / Epic / GOG game detection |
-| `health.py`, `lagcheck.py` | Drive health and the "why am I lagging" analysis |
+| `health.py`, `lagcheck.py`, `sysmon.py`, `netcheck.py` | Drive health, the "why am I lagging" analysis, GPU/disk-user sampling, optional ping |
+| `adaptive.py`, `alerts.py`, `gamemode.py`, `hotkeys.py` | Smart intensity, drive alerts, game mode, global shortcuts |
 | `app_ui.py`, `widgets.py`, `overlay.py` | The window (CustomTkinter) and the optional overlay |
 | `diskuick_tray.py` | Entry point: tray icon, config, autostart, updates |
 | `updater.py` | Release check and checksum-verified one-click update |
@@ -286,7 +318,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
    `dist\Diskuick-Setup-<version>.exe`, `dist\Diskuick-Setup-<version>.exe.sha256` and
    `dist\Diskuick-portable-<version>.zip`:
    ```powershell
-   gh release create v1.2.0 dist\Diskuick-Setup-1.2.0.exe dist\Diskuick-Setup-1.2.0.exe.sha256 dist\Diskuick-portable-1.2.0.zip --title "Diskuick 1.2.0"
+   gh release create v1.3.0 dist\Diskuick-Setup-1.3.0.exe dist\Diskuick-Setup-1.3.0.exe.sha256 dist\Diskuick-portable-1.3.0.zip --title "Diskuick 1.3.0"
    ```
 3. Installed copies then offer **Update now**; the portable exe offers **Download**.
 
@@ -298,7 +330,9 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 
 - **Not code-signed**, so SmartScreen may warn (a certificate costs money).
 - **Game detection** picks the largest non-installer `.exe` in a game folder, which is a best guess; fix it in the Games tab if a game doesn't trigger.
-- **Lag check** doesn't measure GPU or network. **Overlay** doesn't show over exclusive-fullscreen games.
+- **Lag check** measures the network only if you set a host, and the GPU only where Windows exposes its GPU counters (it doesn't read GPU temperature or clocks). The "other programs using the drive" list is partial without admin rights, because Windows hides some processes.
+- **Overlay** doesn't show over exclusive-fullscreen games.
+- **Game mode** only asks windows to close, so programs that live in the tray or ignore the request stay open.
 - **Filipino** translation is best-effort and would benefit from a native speaker's review (`i18n_fil.py`).
 
 <br>

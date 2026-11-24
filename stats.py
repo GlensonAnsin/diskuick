@@ -9,12 +9,21 @@ import config
 
 STATS_PATH = os.path.join(config.APP_DIR, "stats.json")
 LOG_PATH = os.path.join(config.APP_DIR, "stalls.log")
+REPORTS_PATH = os.path.join(config.APP_DIR, "sessions.json")
+MARKS_PATH = os.path.join(config.APP_DIR, "lagmarks.json")
+MAX_REPORTS = 30
 MAX_LOG_BYTES = 256 * 1024
 
 
 class Stats:
-    def __init__(self, stats_path: str = STATS_PATH, log_path: str = LOG_PATH):
+    def __init__(self, stats_path: str = STATS_PATH, log_path: str = LOG_PATH,
+                 reports_path: str | None = None, marks_path: str | None = None):
         self.stats_path, self.log_path = stats_path, log_path
+        base = os.path.dirname(stats_path)
+        self.reports_path = reports_path or os.path.join(base, "sessions.json")
+        self.marks_path = marks_path or os.path.join(base, "lagmarks.json")
+        self.reports = self._load_list(self.reports_path)
+        self.marks = self._load_list(self.marks_path)
         self._lock = threading.Lock()
         self.data = {"active_seconds": 0.0, "sessions": 0, "stalls": 0}
         self.recent = collections.deque(maxlen=50)  # (ts, drive, ms)
@@ -24,6 +33,45 @@ class Stats:
         except (OSError, ValueError):
             pass
         self._load_recent()
+
+    @staticmethod
+    def _load_list(path: str) -> list:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except (OSError, ValueError):
+            return []
+
+    def _save_list(self, path: str, items: list):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(items[-MAX_REPORTS:], f)
+        except OSError:
+            pass
+
+    def add_report(self, rep: dict):
+        """A finished play session (see controller.make_report)."""
+        with self._lock:
+            self.reports.append(rep)
+            del self.reports[:-MAX_REPORTS]
+            self._save_list(self.reports_path, self.reports)
+
+    def recent_reports(self, n: int = 3) -> list:
+        with self._lock:
+            return list(self.reports[-n:][::-1])
+
+    def add_mark(self, mark: dict):
+        """A 'this just lagged' snapshot taken with the hotkey."""
+        with self._lock:
+            self.marks.append(mark)
+            del self.marks[:-MAX_REPORTS]
+            self._save_list(self.marks_path, self.marks)
+
+    def recent_marks(self, n: int = 3) -> list:
+        with self._lock:
+            return list(self.marks[-n:][::-1])
 
     def _load_recent(self):
         try:

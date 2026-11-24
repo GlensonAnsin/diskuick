@@ -54,7 +54,11 @@ def normalize_drive(drive: str) -> str:
 
 
 def probe_path(drive: str) -> str:
-    return f"{normalize_drive(drive)}:\\.diskuick\\probe.bin"
+    letter = normalize_drive(drive)
+    base = os.environ.get("DISKUICK_PROBE_DIR")  # lets the test-suite use its own files
+    if base:
+        return os.path.join(base, letter, ".diskuick", "probe.bin")
+    return f"{letter}:\\.diskuick\\probe.bin"
 
 
 def ensure_probe(drive: str, size_mb: int) -> str:
