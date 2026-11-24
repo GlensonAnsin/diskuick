@@ -320,7 +320,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
    `dist\Diskuick-Setup-<version>.exe`, `dist\Diskuick-Setup-<version>.exe.sha256` and
    `dist\Diskuick-portable-<version>.zip`:
    ```powershell
-   gh release create v1.4.0 dist\Diskuick-Setup-1.4.0.exe dist\Diskuick-Setup-1.4.0.exe.sha256 dist\Diskuick-portable-1.4.0.zip --title "Diskuick 1.4.0"
+   gh release create v1.4.1 dist\Diskuick-Setup-1.4.1.exe dist\Diskuick-Setup-1.4.1.exe.sha256 dist\Diskuick-portable-1.4.1.zip --title "Diskuick 1.4.1"
    ```
 3. Installed copies then offer **Update now**; the portable exe offers **Download**.
 

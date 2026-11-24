@@ -169,6 +169,19 @@ def installer_args(pid: int | None = None) -> list[str]:
     return ["/SILENT", "/NORESTART", "/RELAUNCH=1", f"/WAITPID={os.getpid() if pid is None else pid}"]
 
 
+# Set by PyInstaller's one-file bootloader in the running app. If a new copy of the app inherits them (the
+# installer relaunches Diskuick after an update) it believes the old, already-exited process is its parent
+# and stops with "Security validation failure: invalid originating onefile parent process".
+PYINSTALLER_ENV = ("_PYI_APPLICATION_HOME_DIR", "_PYI_ARCHIVE_FILE", "_PYI_PARENT_PROCESS_LEVEL",
+                   "_PYI_SPLASH_IPC", "_MEIPASS2")
+
+
+def clean_env(env=None) -> dict[str, str]:
+    """A copy of the environment without PyInstaller's bookkeeping variables."""
+    return {k: v for k, v in (os.environ if env is None else env).items() if k.upper() not in PYINSTALLER_ENV}
+
+
 def launch_installer(path: str):
     """Starts the verified installer detached; the caller should quit the app right after."""
-    subprocess.Popen([path, *installer_args()], close_fds=True, creationflags=DETACHED | NO_WINDOW)
+    subprocess.Popen([path, *installer_args()], close_fds=True, creationflags=DETACHED | NO_WINDOW,
+                     env=clean_env())

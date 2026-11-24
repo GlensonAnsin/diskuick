@@ -59,6 +59,21 @@ function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD;
   external 'WaitForSingleObject@kernel32.dll stdcall';
 function CloseHandle(hObject: THandle): BOOL;
   external 'CloseHandle@kernel32.dll stdcall';
+// Passing 0 as the value deletes the variable (a NULL pointer)
+function DeleteEnvVar(lpName: String; lpValue: Cardinal): BOOL;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+// An update is started by the running Diskuick, and this installer then relaunches Diskuick. Without this
+// the new copy inherits the old one's PyInstaller variables and stops with "Security validation failure:
+// invalid originating onefile parent process (PID not found)".
+procedure ClearPyInstallerEnv;
+begin
+  DeleteEnvVar('_PYI_APPLICATION_HOME_DIR', 0);
+  DeleteEnvVar('_PYI_ARCHIVE_FILE', 0);
+  DeleteEnvVar('_PYI_PARENT_PROCESS_LEVEL', 0);
+  DeleteEnvVar('_PYI_SPLASH_IPC', 0);
+  DeleteEnvVar('_MEIPASS2', 0);
+end;
 
 procedure StopRunningApp;
 var
@@ -82,6 +97,7 @@ var
   h: THandle;
 begin
   Result := True;
+  ClearPyInstallerEnv;
   pid := StrToIntDef(ExpandConstant('{param:WAITPID|0}'), 0);
   if pid > 0 then
   begin

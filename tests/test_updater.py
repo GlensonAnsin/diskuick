@@ -170,6 +170,18 @@ class UpdaterTests(unittest.TestCase):
             self.assertIn(flag, a)
         self.assertIn(f"/WAITPID={os.getpid()}", updater.installer_args())
 
+    def test_installer_gets_no_pyinstaller_environment(self):
+        leaked = {"_PYI_PARENT_PROCESS_LEVEL": "1", "_PYI_ARCHIVE_FILE": "x.exe", "_pyi_application_home_dir": "t",
+                  "_MEIPASS2": "m", "PATH": "keep", "TEMP": "keep"}
+        env = updater.clean_env(leaked)
+        self.assertEqual(env, {"PATH": "keep", "TEMP": "keep"})
+        from unittest import mock
+        with mock.patch.dict(os.environ, leaked), mock.patch.object(updater.subprocess, "Popen") as popen:
+            updater.launch_installer("Setup.exe")
+        passed = popen.call_args.kwargs["env"]
+        self.assertFalse([k for k in passed if k.upper().startswith(("_PYI", "_MEIPASS"))])
+        self.assertIn("PATH", passed)
+
 
 if __name__ == "__main__":
     unittest.main()
