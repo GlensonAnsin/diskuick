@@ -106,7 +106,7 @@ the cache). It never touches your game files, and it only looks at the *names* o
 
 ### 🎨 Polished
 - Modern dark / light / system theme
-- English and Filipino
+- 15 languages: English, Filipino, Spanish, French, German, Portuguese (Brazil), Italian, Russian, Chinese (Simplified), Japanese, Korean, Indonesian, Turkish, Vietnamese and Hindi
 - Optional on-screen **latency overlay** (can also show CPU, GPU load and FPS), `Ctrl+Alt+O` to toggle it
 - **Disk tab**: a WizTree-style space analyzer (folder tree, colour treemap, file types), a safe **disk cleanup** for temp files, caches and crash reports, and a restorable "move to Recycle Bin" for anything big you find
 - One-click **updates**, checksum-verified
@@ -337,7 +337,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 - **FPS counter** (optional) needs Diskuick to run as administrator, because Windows only lets administrators read frame events.
 - **Disk analyzer**: when Diskuick runs as administrator on an NTFS drive it reads the file table (MFT) directly, which also sees protected folders and counts hard-linked files once; any problem falls back to a normal multi-threaded folder walk. On a fast SSD both take roughly 10-20 seconds for ~1 million files; the file table pays off more on slower or busy drives. Without admin rights, protected folders are skipped. **Disk cleanup** only removes fixed categories (temp files, caches, crash dumps, Recycle Bin). The analyzer can move one chosen file or folder to the Recycle Bin (restorable); Windows folders, drive roots and user profiles are refused.
 - **Game mode** only asks windows to close, so programs that live in the tray or ignore the request stay open.
-- **Filipino** translation is best-effort and would benefit from a native speaker's review (`i18n_fil.py`).
+- **Translations** are best-effort and would benefit from native speakers' review (`i18n_*.py`).
 
 <br>
 

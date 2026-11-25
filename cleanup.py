@@ -218,6 +218,8 @@ _SYSTEM_TOP = {"windows", "recovery", "system volume information", "$recycle.bin
 def protected_reason(path: str) -> str | None:
     """Why this path must never be deleted from the analyzer, or None if it is fine to offer."""
     norm = lambda s: os.path.normcase(os.path.abspath(s)).rstrip("\\/")
+    if not os.path.splitdrive(path)[1].strip("\\/"):     # "C:" or "C:\": a whole drive (abspath("C:") is the cwd)
+        return "a whole drive"
     p = norm(path)
     drive, rest = os.path.splitdrive(p)
     parts = [x for x in rest.replace("/", "\\").split("\\") if x]
