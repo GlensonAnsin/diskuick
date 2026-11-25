@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -16,7 +17,10 @@ from i18n import T
 from widgets import (ACCENT, BORDER, CARD, FIELD, FONT, MUTED, TEXT, btn_primary, btn_secondary, card,
                      option_menu, pick)
 
-TREEMAP_H = 300
+TREEMAP_H = 340
+WARN = ("#D98E04", "#F0B232")      # drive getting full
+DANGER = ("#D63B3B", "#F26B6B")    # drive nearly full
+STRIPE = ("#F6F8FA", "#1B1F26")
 LUMP_COLOR = "#59616e"
 
 
@@ -48,12 +52,20 @@ class DiskTab:
         option_menu(top, self.drive_var, list(self.choices), width=230).pack(side="right", padx=(0, 8))
 
         a = card(body, T("Disk space analyzer"),
-                 T("Shows what is taking up space, biggest first. It reads folders one by one, so a big drive takes a "
-                   "minute or two. Nothing is changed or deleted here."))
+                 T("Shows what is taking up space, biggest first. Nothing is changed or deleted here. Running as "
+                   "administrator reads the drive's file table directly (like WizTree), which takes seconds; "
+                   "otherwise it reads folders one by one, which can take a minute or two."))
         self.status = ctk.CTkLabel(a, text=T("Press Scan to start."), font=(FONT, 12), text_color=MUTED,
                                    anchor="w", justify="left", wraplength=520)
         self.status.pack(fill="x", padx=16, pady=(8, 0))
+        self.stats = ctk.CTkFrame(a, fg_color="transparent")      # size / files / folders / free tiles, after a scan
+        self.stats.pack(fill="x", padx=16)
         self.bar = ctk.CTkProgressBar(a, progress_color=ACCENT, fg_color=FIELD, height=8, mode="indeterminate")
+        if not mftscan.is_admin():
+            row = ctk.CTkFrame(a, fg_color="transparent")
+            row.pack(fill="x", padx=16, pady=(8, 0))
+            btn_secondary(row, T("Restart as administrator for a fast scan"), self.win.app.restart_as_admin,
+                          height=30).pack(side="left")
 
         nav = ctk.CTkFrame(a, fg_color="transparent")
         nav.pack(fill="x", padx=16, pady=(8, 4))
@@ -73,6 +85,9 @@ class DiskTab:
         self.canvas.bind("<Double-Button-1>", self._tm_double)
         self.canvas.bind("<Button-3>", self._tm_menu)
         self.canvas.bind("<Configure>", lambda e: self._draw())
+        self.canvas.bind("<Motion>", self._tm_move)
+        self.canvas.bind("<Leave>", lambda e: self._set_hover(None))
+        self._hover_node = None
         self.hover = ctk.CTkLabel(a, text="", font=(FONT, 11), text_color=MUTED, anchor="w")
         self.hover.pack(fill="x", padx=16)
 
@@ -85,14 +100,17 @@ class DiskTab:
         style.map("Disk.Treeview", background=[("selected", pick(ACCENT))], foreground=[("selected", "#06210F")])
         holder = ctk.CTkFrame(a, fg_color="transparent")
         holder.pack(fill="x", padx=12, pady=(4, 14))
-        self.table = ttk.Treeview(holder, columns=("pct", "size", "files"), height=11, style="Disk.Treeview")
-        for col, title, w, anchor in (("#0", T("Name"), 230, "w"), ("pct", T("% of parent"), 80, "e"),
-                                      ("size", T("Size"), 90, "e"), ("files", T("Files"), 80, "e")):
-            self.table.heading(col, text=title)
+        self.table = ttk.Treeview(holder, columns=("pct", "size", "files"), height=14, style="Disk.Treeview")
+        self.table.tag_configure("odd", background=pick(STRIPE))
+        self._sort = ("size", True)                       # (column, biggest first)
+        self._titles = {"#0": T("Name"), "pct": T("% of parent"), "size": T("Size"), "files": T("Files")}
+        for col, w, anchor in (("#0", 230, "w"), ("pct", 90, "e"), ("size", 90, "e"), ("files", 80, "e")):
+            self.table.heading(col, command=lambda c=col: self._sort_by(c))
             self.table.column(col, width=w, anchor=anchor, stretch=(col == "#0"))
+        self._heading_text()
         sb = ttk.Scrollbar(holder, orient="vertical", command=self.table.yview)
         self.table.configure(yscrollcommand=sb.set)
-        self.table.pack(side="left", fill="x", expand=True)
+        self.table.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         self.table.bind("<Double-Button-1>", self._table_double)
         self.table.bind("<<TreeviewSelect>>", self._table_select)
@@ -109,6 +127,7 @@ class DiskTab:
             self.scan_btn.configure(text=T("Stopping..."), state="disabled")
             return
         letter = self.choices.get(self.drive_var.get(), "C")
+        self._t_scan = time.time()
         self._cancel = threading.Event()
         cancel = self._cancel
         self._scanning = True
@@ -142,10 +161,8 @@ class DiskTab:
             used = f"{diskscan.fmt_size(du.used)} / {diskscan.fmt_size(du.total)}"
         except OSError:
             used = ""
-        msg = T("Found {size} in {files} files and {folders} folders.").format(
-            size=diskscan.fmt_size(tree.size), files=f"{tree.files:,}", folders=f"{tree.folders:,}")
-        if used:
-            msg += "  " + T("Drive used: {used}.").format(used=used)
+        self._show_stats(tree, letter)
+        msg = T("Took {s} s.").format(s=f"{time.time() - self._t_scan:.0f}")
         if cancelled:
             msg += "  " + T("Stopped early, so this is partial.")
         elif method == "mft":
@@ -164,13 +181,50 @@ class DiskTab:
         total = max(sum(v[0] for v in self.exts.values()), 1)
         for ext, size, n in diskscan.top_extensions(self.exts, 12):
             r = ctk.CTkFrame(self.types_box, fg_color="transparent")
-            r.pack(fill="x", pady=1)
-            ctk.CTkLabel(r, text=ext, width=80, anchor="w", font=(FONT, 12, "bold"), text_color=TEXT).pack(side="left")
-            b = ctk.CTkProgressBar(r, height=8, fg_color=FIELD, progress_color=diskscan.color_for(ext, False), width=180)
+            r.pack(fill="x", pady=2)
+            color = diskscan.color_for(ext, False)
+            ctk.CTkLabel(r, text="●", width=16, font=(FONT, 12), text_color=color).pack(side="left")
+            ctk.CTkLabel(r, text=ext, width=72, anchor="w", font=(FONT, 12, "bold"), text_color=TEXT).pack(side="left")
+            ctk.CTkLabel(r, text=f"{size / total * 100:.1f}%  ·  {diskscan.fmt_size(size)}  ·  {n:,}", width=190,
+                         font=(FONT, 11), text_color=MUTED, anchor="e").pack(side="right")
+            b = ctk.CTkProgressBar(r, height=10, fg_color=FIELD, progress_color=color, corner_radius=5)
             b.set(size / total)
-            b.pack(side="left", padx=6)
-            ctk.CTkLabel(r, text=f"{size / total * 100:.1f}%  ·  {diskscan.fmt_size(size)}  ·  {n:,}",
-                         font=(FONT, 11), text_color=MUTED, anchor="w").pack(side="left", padx=6)
+            b.pack(side="left", fill="x", expand=True, padx=8)
+
+    def _tile(self, parent, col, value, caption):
+        f = ctk.CTkFrame(parent, fg_color=FIELD, corner_radius=10)
+        f.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 6, 0))
+        parent.columnconfigure(col, weight=1, uniform="tile")
+        ctk.CTkLabel(f, text=value, font=(FONT, 16, "bold"), text_color=TEXT, anchor="w").pack(
+            anchor="w", padx=12, pady=(8, 0))
+        ctk.CTkLabel(f, text=caption, font=(FONT, 11), text_color=MUTED, anchor="w").pack(
+            anchor="w", padx=12, pady=(0, 8))
+
+    def _show_stats(self, tree, letter):
+        """Size / files / folders / free tiles plus a bar of how full the drive is."""
+        for w in self.stats.winfo_children():
+            w.destroy()
+        try:
+            du = shutil.disk_usage(f"{letter}:\\")
+        except OSError:
+            du = None
+        tiles = ctk.CTkFrame(self.stats, fg_color="transparent")
+        tiles.pack(fill="x", pady=(10, 0))
+        self._tile(tiles, 0, diskscan.fmt_size(tree.size), T("Size"))
+        self._tile(tiles, 1, f"{tree.files:,}", T("Files"))
+        self._tile(tiles, 2, f"{tree.folders:,}", T("Folders"))
+        if du:
+            self._tile(tiles, 3, diskscan.fmt_size(du.free), T("Free"))
+            frac = du.used / du.total if du.total else 0
+            color = DANGER if frac >= 0.95 else WARN if frac >= 0.85 else ACCENT
+            row = ctk.CTkFrame(self.stats, fg_color="transparent")
+            row.pack(fill="x", pady=(8, 0))
+            ctk.CTkLabel(row, text=T("Drive used: {used}.").format(
+                used=f"{diskscan.fmt_size(du.used)} / {diskscan.fmt_size(du.total)}  ({frac * 100:.0f}%)"),
+                font=(FONT, 11), text_color=MUTED, anchor="w").pack(anchor="w")
+            bar = ctk.CTkProgressBar(row, height=10, corner_radius=5, fg_color=FIELD, progress_color=color)
+            bar.set(min(frac, 1))
+            bar.pack(fill="x", pady=(3, 0))
 
     # navigation
     def _navigate(self, node):
@@ -185,17 +239,34 @@ class DiskTab:
         if self.cur is not None and self.cur.parent is not None:
             self._navigate(self.cur.parent)
 
+    def _heading_text(self):
+        col, desc = self._sort
+        for c, title in self._titles.items():
+            arrow = (" ▼" if desc else " ▲") if c == col else ""
+            self.table.heading(c, text=title + arrow)
+
+    def _sort_by(self, col):
+        """Click a column heading: sort by it; click again to flip the order."""
+        c, desc = self._sort
+        self._sort = (col, not desc) if col == c else (col, col != "#0")
+        self._heading_text()
+        self._fill_table()
+
     def _fill_table(self):
         self.table.delete(*self.table.get_children())
         self._row_nodes.clear()
         node = self.cur
         if node is None:
             return
-        for i, ch in enumerate(node.children[:500]):
+        col, desc = self._sort
+        self.table.configure(height=max(4, min(14, len(node.children))))   # no big empty block for small folders
+        key = {"#0": lambda n: n.name.lower(), "files": lambda n: n.files}.get(col, lambda n: n.size)
+        for i, ch in enumerate(sorted(node.children, key=key, reverse=desc)[:500]):
             pct = f"{ch.size / node.size * 100:.1f} %" if node.size else ""
-            name = ("📁 " if ch.is_dir else "") + ch.name
+            name = ("📁 " if ch.is_dir else "📄 " if not ch.lump else "🗂 ") + ch.name
             iid = str(i)
-            self.table.insert("", "end", iid=iid, text=name, values=(pct, diskscan.fmt_size(ch.size), f"{ch.files:,}"))
+            self.table.insert("", "end", iid=iid, text=name, tags=("odd",) if i % 2 else (),
+                              values=(pct, diskscan.fmt_size(ch.size), f"{ch.files:,}"))
             self._row_nodes[iid] = ch
 
     def _select(self, node):
@@ -247,6 +318,7 @@ class DiskTab:
         c = self.canvas
         c.delete("all")
         self._rects = []
+        self._hover_node = None
         node = self.cur
         if node is None or node.size <= 0:
             c.create_text(c.winfo_width() / 2 or 250, TREEMAP_H / 2, fill=pick(MUTED), font=(FONT, 11),
@@ -276,12 +348,40 @@ class DiskTab:
                 return node
         return None
 
+    def _outline(self, node, tag, color, width):
+        self.canvas.delete(tag)
+        for x0, y0, x1, y1, n in self._rects:
+            if n is node:
+                self.canvas.create_rectangle(x0 + 1, y0 + 1, x1 - 1, y1 - 1, outline=color, width=width, tags=tag)
+                return
+
+    def _describe(self, n):
+        return (f"{n.path if not n.lump else n.name}   ·   {diskscan.fmt_size(n.size)}"
+                f"   ·   {n.files:,} {T('Files').lower()}")
+
+    def _set_hover(self, n):
+        """Outline the block under the mouse and describe it (or the selection once the mouse leaves)."""
+        if n is self._hover_node:
+            return
+        self._hover_node = n
+        self.canvas.delete("hl")
+        if n is not None:
+            self._outline(n, "hl", "#FFFFFF", 2)
+            self.hover.configure(text=self._describe(n))
+        elif self.selected is not None:
+            self.hover.configure(text=self._describe(self.selected))
+        else:
+            self.hover.configure(text="")
+
+    def _tm_move(self, e):
+        self._set_hover(self._hit(e.x, e.y))
+
     def _tm_click(self, e):
         n = self._hit(e.x, e.y)
         if n is not None:
             self._select(n)
-            self.hover.configure(text=f"{n.path if not n.lump else n.name}   ·   {diskscan.fmt_size(n.size)}"
-                                      f"   ·   {n.files:,} files")
+            self._outline(n, "sel", pick(ACCENT), 3)
+            self.hover.configure(text=self._describe(n))
 
     def _tm_double(self, e):
         n = self._hit(e.x, e.y)

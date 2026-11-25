@@ -117,6 +117,36 @@ class ParserTests(unittest.TestCase):
         self.assertNotIn("Link", [c.name for c in tree.children])
         self.assertNotIn("Settings", [c.name for c in tree.children])
 
+    def test_pieces_parsed_separately_and_merged_match_one_pass(self):
+        recs = {
+            5: dir_rec(".", 5), 30: dir_rec("Users", 5), 31: dir_rec("Games", 5),
+            40: file_rec("a.txt", 30, 10), 48: file_rec("b.TXT", 30, 500),
+            50: record([attr_filename("huge.rpf", 31, 1, real=0)]),
+            60: record([attr_data_nonres(3_000_000_000)], base=50 | (1 << 48)),   # extension lands in a later piece
+            61: record([attr_filename("big.iso", 31, 1), attr_data_nonres(5_000_000)]),
+        }
+        buf, total = image(recs)
+        whole = mftscan.Catalog(total)
+        mftscan.parse_chunk(buf, RL, 0, whole)
+        merged = mftscan.Catalog(total)
+        step = 16                                              # records per piece
+        for first in range(0, total, step):
+            piece = buf[first * RL:(first + step) * RL]
+            merged.merge(mftscan.parse_in_worker_local(piece, RL, first, total))
+        a, b = mftscan.build_tree(whole, "D:\\"), mftscan.build_tree(merged, "D:\\")
+        self.assertEqual((a.size, a.files, a.folders), (b.size, b.files, b.folders))
+        self.assertEqual(whole.exts, merged.exts)
+        self.assertEqual(b.size, 3_005_000_510)
+
+    def test_plan_pieces_covers_the_mft_in_whole_records(self):
+        boot = mftscan.Boot.__new__(mftscan.Boot)
+        boot.record, boot.cluster = 1024, 4096
+        pieces = mftscan.plan_pieces([(10, 5), (100, 3)], boot, 8 * 4096, piece=8192)
+        self.assertEqual(sum(n for _, _, n in pieces), 8 * 4096)
+        self.assertEqual(pieces[0], (0, 10 * 4096, 8192))
+        self.assertEqual(pieces[-1][0] * 1024 + pieces[-1][2], 8 * 4096)
+        self.assertIsNone(mftscan.plan_pieces([(10, 1)], boot, 1000, piece=8192))   # not whole records
+
     def test_fragmented_file_size_comes_from_its_extension_record(self):
         recs = {
             5: dir_rec(".", 5),

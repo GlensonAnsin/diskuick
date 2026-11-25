@@ -7,13 +7,18 @@ looks wrong (read error, odd layout, results that don't match the real filesyste
 Only the unnamed data stream of each file is counted (alternate data streams are ignored) and a file with
 several hard links is counted once. Names/sizes come from each file's base MFT record.
 """
+import collections
+import concurrent.futures
+import concurrent.futures.process
 import ctypes
 import os
 import random
 import struct
 import threading
+import time
 from array import array
 from collections import defaultdict
+from multiprocessing import shared_memory
 
 import diskscan
 from diskscan import BIG_FILE, Node, add_file_nodes, ext_of, finalize
@@ -122,15 +127,12 @@ def mft_extents(rec0: bytes, boot: Boot) -> tuple[list, int]:
 
 
 # ------------------------------------------------------------------ parsing ----
-class Catalog:
-    """Everything learned about the volume from the MFT records, indexed by record number."""
+class _Sink:
+    """What parse_chunk fills in. Catalog is the whole-volume one; Partial is what a worker process builds
+    for one chunk (plain dicts, cheap to send back) and Catalog.merge folds it in."""
 
     def __init__(self, total: int):
-        self.parent = array("I", bytes(4 * total))
-        self.is_dir = bytearray(total)
-        self.lump_size = array("Q", bytes(8 * total))
-        self.lump_n = array("I", bytes(4 * total))
-        self.names: dict[int, str] = {}                                   # directories only
+        self.total = total
         self.big: dict[int, list[tuple[str, int]]] = defaultdict(list)    # parent -> [(name, size)]
         self.exts: dict[str, list[int]] = {}
         self.files = 0
@@ -169,6 +171,52 @@ class Catalog:
                 self.ext_data[base] = u64(rec, off + 0x30)[0]    # first fragment of the data attribute
             off += alen
 
+
+
+class Partial(_Sink):
+    def __init__(self, total: int):
+        super().__init__(total)
+        self.is_dir: dict[int, int] = {}
+        self.parent: dict[int, int] = {}
+        self.names: dict[int, str] = {}
+        self.lump_size: dict[int, int] = defaultdict(int)
+        self.lump_n: dict[int, int] = defaultdict(int)
+
+
+class Catalog(_Sink):
+    """Everything learned about the volume from the MFT records, indexed by record number."""
+
+    def __init__(self, total: int):
+        super().__init__(total)
+        self.parent = array("I", bytes(4 * total))
+        self.is_dir = bytearray(total)
+        self.lump_size = array("Q", bytes(8 * total))
+        self.lump_n = array("I", bytes(4 * total))
+        self.names: dict[int, str] = {}                                   # directories only
+
+    def merge(self, part: Partial):
+        for idx, name in part.names.items():
+            self.names[idx] = name
+            self.is_dir[idx] = 1
+            self.parent[idx] = part.parent[idx]
+        for p, v in part.lump_size.items():
+            self.lump_size[p] += v
+        for p, v in part.lump_n.items():
+            self.lump_n[p] += v
+        for p, lst in part.big.items():
+            self.big[p].extend(lst)
+        for k, (size, n) in part.exts.items():
+            slot = self.exts.get(k)
+            if slot is None:
+                self.exts[k] = [size, n]
+            else:
+                slot[0] += size
+                slot[1] += n
+        self.files += part.files
+        self.bytes += part.bytes
+        self.pending.extend(part.pending)
+        self.ext_data.update(part.ext_data)
+
     def resolve(self):
         for idx, parent, name, size in self.pending:
             self.add_file(parent, name, self.ext_data.get(idx, size))
@@ -178,7 +226,7 @@ class Catalog:
 def parse_chunk(buf: bytes, rl: int, first: int, cat: Catalog) -> int:
     """Read every whole record in `buf` (the first one is record number `first`) into `cat`.
     Returns how many bytes of `buf` were consumed (a multiple of the record size)."""
-    n_total = len(cat.is_dir)
+    n_total = cat.total
     count = len(buf) // rl
     for k in range(count):
         idx, pos = first + k, k * rl
@@ -279,31 +327,144 @@ def _read_exact(f, offset: int, size: int) -> bytes:
     return data
 
 
-def scan_mft(letter: str, cancel: threading.Event | None = None, progress=None):
+last_timing: dict = {}      # seconds spent in the last scan_mft, for diagnosing slow scans
+
+
+_attached = {}      # per worker process: shared-memory blocks it has opened
+
+
+def parse_in_worker(shm_name: str, nbytes: int, rl: int, first: int, total: int) -> Partial:
+    """Runs in a worker process: parse one piece of the MFT that the main process left in shared memory."""
+    shm = _attached.get(shm_name)
+    if shm is None:
+        shm = _attached[shm_name] = shared_memory.SharedMemory(name=shm_name)
+    part = Partial(total)
+    parse_chunk(bytes(shm.buf[:nbytes]), rl, first, part)
+    return part
+
+
+def parse_in_worker_local(buf: bytes, rl: int, first: int, total: int) -> Partial:
+    """Same as parse_in_worker, but for bytes already in hand (used by tests)."""
+    part = Partial(total)
+    parse_chunk(buf, rl, first, part)
+    return part
+
+
+def plan_pieces(runs, boot: Boot, data_size: int, piece: int = 8 * 1024 * 1024):
+    """Split the MFT into [(first record number, disk offset, bytes)] pieces of whole records, or None if the
+    layout doesn't allow that (then the scan reads it in this process instead)."""
+    rl = boot.record
+    pieces, number, remaining = [], 0, data_size
+    for lcn, clusters in runs:
+        pos, length = lcn * boot.cluster, min(clusters * boot.cluster, remaining)
+        if length % rl:
+            return None
+        while length > 0:
+            n = min(piece // rl * rl, length)
+            pieces.append((number, pos, n))
+            number, pos, length, remaining = number + n // rl, pos + n, length - n, remaining - n
+    return pieces if remaining == 0 else None
+
+
+def _chunks(f, boot: Boot, runs, data_size: int, cancel):
+    """Yield (first record number, bytes of whole records) reading the MFT in big sequential pieces."""
+    number, leftover, remaining = 0, b"", data_size
+    for lcn, clusters in runs:
+        pos, length = lcn * boot.cluster, clusters * boot.cluster
+        while length > 0 and remaining > 0:
+            if cancel is not None and cancel.is_set():
+                return
+            want = min(CHUNK, length)
+            data = _read_exact(f, pos, want)[:remaining]
+            pos, length, remaining = pos + want, length - want, remaining - len(data)
+            buf = leftover + data if leftover else data
+            used = len(buf) // boot.record * boot.record
+            yield number, buf[:used]
+            number += used // boot.record
+            leftover = buf[used:]
+
+
+def _parse_parallel(f, pieces, rl: int, cat: Catalog, cancel, progress, workers: int):
+    """One reader goes through the MFT in order (a disk likes that) and drops each piece into shared memory;
+    several processes parse pieces on their own CPU cores meanwhile, so reading is the only waiting left."""
+    timing = last_timing
+    timing.update(disk_read=0.0, waiting_for_parsers=0.0, merging=0.0, started=time.perf_counter())
+    slot_size = max(n for _, _, n in pieces)
+    blocks = [shared_memory.SharedMemory(create=True, size=slot_size) for _ in range(workers * 2 + 2)]
+    free = collections.deque(range(len(blocks)))
+    inflight: collections.deque = collections.deque()       # (future, slot)
+    try:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
+            def finish_oldest():
+                fut, slot = inflight.popleft()
+                t = time.perf_counter()
+                res = fut.result()
+                timing["waiting_for_parsers"] += time.perf_counter() - t
+                t = time.perf_counter()
+                cat.merge(res)
+                timing["merging"] = timing.get("merging", 0.0) + time.perf_counter() - t
+                free.append(slot)
+                if progress is not None:
+                    progress(cat.files, cat.bytes)
+            try:
+                for number, offset, nbytes in pieces:
+                    if cancel is not None and cancel.is_set():
+                        break
+                    while not free:
+                        finish_oldest()
+                    slot = free.popleft()
+                    f.seek(offset)
+                    t = time.perf_counter()
+                    if f.readinto(blocks[slot].buf[:nbytes]) != nbytes:
+                        raise MftError("short read from the volume")
+                    timing["disk_read"] += time.perf_counter() - t
+                    inflight.append((pool.submit(parse_in_worker, blocks[slot].name, nbytes, rl, number, cat.total),
+                                     slot))
+                while inflight:
+                    finish_oldest()
+            except BaseException:
+                for fut, _ in inflight:
+                    fut.cancel()
+                raise
+    finally:
+        timing['loop_done'] = round(time.perf_counter() - timing['started'], 1)
+        for b in blocks:
+            b.close()
+            try:
+                b.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def scan_mft(letter: str, cancel: threading.Event | None = None, progress=None, workers: int | None = None):
     """Scan drive `letter` via its MFT. Returns (tree, {extension: [bytes, files]}). Raises MftError/OSError
-    when this isn't possible; callers fall back to diskscan.scan."""
+    when this isn't possible; callers fall back to diskscan.scan.
+
+    Parsing is the slow part, so it is spread over several processes (`workers`; 1 = in this process)."""
+    if workers is None:
+        workers = max(1, min(os.cpu_count() or 1, 8))
+    t0 = time.perf_counter()
     with open(rf"\\.\{letter}:", "rb", buffering=0) as f:
         boot = Boot(_read_exact(f, 0, 512))
         rec0 = _read_exact(f, boot.mft_lcn * boot.cluster, boot.record)
         runs, data_size = mft_extents(rec0, boot)
         cat = Catalog(data_size // boot.record)
-        number, leftover, remaining = 0, b"", data_size
-        for lcn, clusters in runs:
-            pos, length = lcn * boot.cluster, clusters * boot.cluster
-            while length > 0 and remaining > 0:
-                if cancel is not None and cancel.is_set():
-                    length = remaining = 0
-                    break
-                want = min(CHUNK, length)
-                data = _read_exact(f, pos, want)[:remaining]
-                pos, length, remaining = pos + want, length - want, remaining - len(data)
-                buf = leftover + data if leftover else data
-                used = parse_chunk(buf, boot.record, number, cat)
-                number += used // boot.record
-                leftover = buf[used:]
+        done = False
+        pieces = plan_pieces(runs, boot, data_size) if workers > 1 else None
+        if pieces:
+            try:
+                _parse_parallel(f, pieces, boot.record, cat, cancel, progress, workers)
+                done = True
+            except (concurrent.futures.process.BrokenProcessPool, OSError, RuntimeError, ImportError):
+                cat = Catalog(data_size // boot.record)     # workers unavailable here: redo it in this process
+        if not done:
+            for number, buf in _chunks(f, boot, runs, data_size, cancel):
+                parse_chunk(buf, boot.record, number, cat)
                 if progress is not None:
                     progress(cat.files, cat.bytes)
+    t1 = time.perf_counter()
     tree = build_tree(cat, f"{letter}:\\")
+    last_timing.update(workers=workers, read_and_parse=round(t1 - t0, 1), build=round(time.perf_counter() - t1, 1))
     if progress is not None:
         progress(cat.files, cat.bytes)
     return tree, cat.exts
