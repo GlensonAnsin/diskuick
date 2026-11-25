@@ -3,6 +3,7 @@
 Deliberately limited to fixed categories (temp files, caches, crash dumps, the Recycle Bin). Nothing the
 user chose by hand is deleted here, and every delete is confined to its category's folder.
 """
+import concurrent.futures
 import ctypes
 import glob
 import os
@@ -129,10 +130,11 @@ def measure(cat: Category, now: float | None = None) -> tuple[int, int]:
 
 
 # ---------------------------------------------------------------- cleaning ----
-def _remove_file(path: str) -> int | None:
+def _remove_file(path: str, size: int | None = None) -> int | None:
     """Delete one file; return its size, or None if it could not be removed (e.g. in use)."""
     try:
-        size = os.lstat(path).st_size
+        if size is None:
+            size = os.lstat(path).st_size
         try:
             os.remove(path)
         except PermissionError:
@@ -143,6 +145,9 @@ def _remove_file(path: str) -> int | None:
         return None
 
 
+WORKERS = 16   # deletes mostly wait on the disk / antivirus, so many at once is much faster than one by one
+
+
 def clean_dir(root: str, min_age: int = 0, cancel: threading.Event | None = None,
               now: float | None = None, progress=None) -> tuple[int, int]:
     """Delete everything inside `root` (never `root` itself, never through a junction/symlink).
@@ -151,31 +156,47 @@ def clean_dir(root: str, min_age: int = 0, cancel: threading.Event | None = None
     freed = removed = 0
     dirs: list[str] = []
     stack = [root]
-    while stack:
-        if cancel is not None and cancel.is_set():
-            break
-        d = stack.pop()
-        try:
-            it = os.scandir(d)
-        except OSError:
-            continue
-        with it:
-            for e in it:
-                try:
-                    st = e.stat(follow_symlinks=False)
-                    if e.is_dir(follow_symlinks=False):
-                        if not _is_reparse(st):
-                            stack.append(e.path)
-                            dirs.append(e.path)
-                    elif now - st.st_mtime >= min_age:
-                        got = _remove_file(e.path)
-                        if got is not None:
-                            freed += got
-                            removed += 1
-                        if progress is not None and removed % 200 == 0:
-                            progress(freed, removed)
-                except OSError:
-                    continue
+    pending: set = set()
+
+    def collect(done_only: bool):
+        nonlocal freed, removed
+        done = [f for f in pending if f.done()]
+        if not done_only and len(pending) > WORKERS * 8:      # keep the queue bounded while scanning
+            done = list(concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)[0])
+        for f in done:
+            pending.discard(f)
+            got = f.result()
+            if got is not None:
+                freed += got
+                removed += 1
+        if done and progress is not None:
+            progress(freed, removed)
+
+    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+        while stack:
+            if cancel is not None and cancel.is_set():
+                break
+            d = stack.pop()
+            try:
+                it = os.scandir(d)
+            except OSError:
+                continue
+            with it:
+                for e in it:
+                    try:
+                        st = e.stat(follow_symlinks=False)
+                        if e.is_dir(follow_symlinks=False):
+                            if not _is_reparse(st):
+                                stack.append(e.path)
+                                dirs.append(e.path)
+                        elif now - st.st_mtime >= min_age:
+                            pending.add(pool.submit(_remove_file, e.path, st.st_size))
+                    except OSError:
+                        continue
+            collect(False)
+        while pending:
+            concurrent.futures.wait(pending)
+            collect(True)
     for d in sorted(dirs, key=len, reverse=True):   # empty folders, deepest first; non-empty ones just fail
         try:
             os.rmdir(d)
