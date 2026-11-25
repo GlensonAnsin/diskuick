@@ -20,7 +20,7 @@ DEFAULTS = {
     "overlay": False,            # small latency readout in a screen corner while a game runs
     "overlay_corner": "top-right",
     "theme": "system",           # system | dark | light
-    "language": "en",            # en | fil
+    "language": "en",            # a code from i18n.LANGS
     "check_updates": True,       # only does anything if version.UPDATE_REPO is set
     "adaptive": False,           # start Light, step up only while stalls continue (ignores default_pattern)
     "alerts": True,              # tell me when the game drive is nearly full / unhealthy
@@ -35,13 +35,19 @@ DEFAULTS = {
 
 def norm_game(g: dict) -> dict:
     pat = g.get("pattern")
-    return {
+    out = {
         "name": str(g.get("name") or g.get("exe") or "Game"),
         "exe": str(g.get("exe", "")).strip().lower(),
         "drive": str(g.get("drive", "C")).strip().rstrip(":\\/").upper()[:1] or "C",
         "pattern": pat if pat in PATTERNS else None,
         "enabled": bool(g.get("enabled", True)),
     }
+    if g.get("auto_drive"):              # drive was only a guess: fix it once the game's real location is known
+        out["auto_drive"] = True
+    for k in ("path", "exe_path"):       # optional: install folder / full exe path, used to show the game's icon
+        if isinstance(g.get(k), str) and g[k]:
+            out[k] = g[k]
+    return out
 
 
 def migrate(raw: dict) -> dict:

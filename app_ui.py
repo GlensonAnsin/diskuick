@@ -14,6 +14,7 @@ from disk_ui import DiskTab
 import gamemode
 import games as games_mod
 import health as health_mod
+import icons
 import lagcheck as lag_mod
 import netcheck
 import stats as stats_mod
@@ -32,7 +33,7 @@ PATTERN_LABELS = [("random", "Light"), ("seq", "Balanced"), ("heavy", "Heavy")]
 PATTERN_DESC = {
     "random": "Tiny random reads, about 10 per second. Least overhead - try this first.",
     "seq": "Light sequential reads, about 20 per second. For drives that need a bit more.",
-    "heavy": "Non-stop reads, like HD Tune. Strongest effect, but the drive is always busy.",
+    "heavy": "Non-stop reads. Strongest effect, but the drive is always busy.",
 }
 STATE_NAMES = {"active": "Active", "waiting": "Waiting", "off": "Off", "error": "Error"}
 
@@ -49,13 +50,15 @@ def pat_value(label):  # translated label -> config value
 
 
 class MainWindow(ctk.CTkToplevel):
-    W, H = 640, 860
+    W, H = 820, 860
+    MIN_W, MIN_H = 560, 520
 
     def __init__(self, master, app, tab: str | None = None):
         super().__init__(master, fg_color=BG)
         self.app, self.cfg = app, app.cfg
         self.title("Diskuick")
-        self.resizable(False, False)
+        self.resizable(True, True)         # drag the edges, or use the maximize button for fullscreen
+        self.minsize(self.MIN_W, self.MIN_H)
         self.q: queue.Queue = queue.Queue()
         self._icon = ImageTk.PhotoImage(render_logo(64))
         self.after(250, lambda: self._safe(lambda: self.iconphoto(False, self._icon)))
@@ -95,8 +98,35 @@ class MainWindow(ctk.CTkToplevel):
         self._tick()
         self._on_tab()  # load health right away if the Tools tab was pre-selected
         self.protocol("WM_DELETE_WINDOW", self._close)
+        self._wrap_job = None
+        self.bind("<Configure>", self._on_resize)
 
     # ------------------------------------------------------------ plumbing --
+    def _on_resize(self, e):
+        if e.widget is not self:
+            return
+        if self._wrap_job:
+            self.after_cancel(self._wrap_job)
+        self._wrap_job = self.after(120, lambda: self._safe(self._rewrap))
+
+    def _rewrap(self):
+        """Let long description text use the width of a resized window instead of staying at a fixed wrap."""
+        self._wrap_job = None
+        width = max(self.winfo_width() / self._get_window_scaling() - 120, 300)
+        stack = [self]
+        while stack:
+            w = stack.pop()
+            stack.extend(w.winfo_children())
+            if isinstance(w, ctk.CTkLabel) and getattr(w, "_wrap_base", None) is None:
+                try:
+                    base = int(w.cget("wraplength") or 0)
+                except Exception:
+                    base = 0
+                w._wrap_base = base if base >= 500 else 0     # only long paragraphs; banners/dialogs keep theirs
+            if isinstance(w, ctk.CTkLabel) and w._wrap_base:
+                if abs(int(w.cget("wraplength")) - width) > 4:
+                    w.configure(wraplength=int(width))
+
     @staticmethod
     def _safe(fn):
         try:
@@ -414,7 +444,7 @@ class MainWindow(ctk.CTkToplevel):
     def _save_games(self):
         self.app.apply({"games": self.cfg["games"]})
 
-    def _add_exe(self, exe: str, name: str | None = None, drive: str | None = None):
+    def _add_exe(self, exe: str, name: str | None = None, drive: str | None = None, path: str | None = None):
         exe = exe.strip().lower()
         if not exe:
             return
@@ -422,8 +452,14 @@ class MainWindow(ctk.CTkToplevel):
             exe += ".exe"
         if any(g["exe"] == exe for g in self.cfg["games"]):
             return
-        self.cfg["games"].append(config.norm_game({"name": name or exe, "exe": exe,
-                                                    "drive": drive or self._default_drive()}))
+        game = {"name": name or exe, "exe": exe, "drive": drive, "path": path}
+        if not drive:                    # work out the drive from where the game really is
+            found = icons.locate({"exe": exe, "path": path})
+            if found:
+                game["drive"], game["exe_path"] = os.path.splitdrive(found)[0][:1].upper(), found
+            else:                        # not running / not found yet: guess now, correct it when it's seen
+                game["drive"], game["auto_drive"] = self._default_drive(), True
+        self.cfg["games"].append(config.norm_game(game))
         self._save_games()
         self._render_games()
 
@@ -446,7 +482,7 @@ class MainWindow(ctk.CTkToplevel):
 
     def _add_detected(self, chosen):
         for g in chosen:
-            self._add_exe(g["exe"], g["name"], g["drive"])
+            self._add_exe(g["exe"], g["name"], g["drive"], g.get("path"))
 
     def _render_games(self):
         for w in self.games_box.winfo_children():
@@ -457,14 +493,24 @@ class MainWindow(ctk.CTkToplevel):
                          justify="center").pack(pady=40)
             return
         letters = self._letters()
-        labels = [T("Default")] + [T(l) for _, l in PATTERN_LABELS]
+        # a game left on "no override" follows the global setting: Smart intensity if that's on
+        follow = T("Smart") if self.cfg["adaptive"] else T("Default")
+        labels = [follow] + [T(l) for _, l in PATTERN_LABELS]
         for g in self.cfg["games"]:
             r = ctk.CTkFrame(self.games_box, fg_color=CARD, corner_radius=12, border_width=1, border_color=BORDER)
             r.pack(fill="x", pady=(0, 8))
             top = ctk.CTkFrame(r, fg_color="transparent")
             top.pack(fill="x", padx=14, pady=(10, 0))
-            ctk.CTkLabel(top, text="🎮  " + g["name"], font=(FONT, 14, "bold"), text_color=TEXT,
+            ico = self._game_icon(g)
+            if ico is not None:
+                ctk.CTkLabel(top, text="", image=ico).pack(side="left", padx=(0, 10))
+            else:
+                ctk.CTkLabel(top, text="🎮", font=(FONT, 18), text_color=MUTED, width=28).pack(side="left", padx=(0, 10))
+            ctk.CTkLabel(top, text=g["name"], font=(FONT, 14, "bold"), text_color=TEXT,
                          anchor="w").pack(side="left")
+            ctk.CTkButton(top, text="✎", width=28, height=26, corner_radius=8, fg_color="transparent",
+                          hover_color=BORDER, text_color=MUTED, font=(FONT, 13),
+                          command=lambda g=g: self._rename_game(g)).pack(side="left", padx=(4, 0))
             ctk.CTkButton(top, text="✕", width=28, height=26, corner_radius=8, fg_color="transparent",
                           hover_color=BORDER, text_color=MUTED, font=(FONT, 12),
                           command=lambda g=g: self._remove_game(g)).pack(side="right")
@@ -474,7 +520,7 @@ class MainWindow(ctk.CTkToplevel):
             bot = ctk.CTkFrame(r, fg_color="transparent")
             bot.pack(fill="x", padx=14, pady=(2, 12))
             ctk.CTkLabel(bot, text=g["exe"], font=(FONT, 12), text_color=MUTED).pack(side="left")
-            pv = ctk.StringVar(value=pat_label(g["pattern"]))
+            pv = ctk.StringVar(value=pat_label(g["pattern"]) if g["pattern"] else follow)
             option_menu(bot, pv, labels, width=110, height=30,
                         command=lambda v, g=g: self._set_game(g, pattern=pat_value(v))).pack(side="right")
             ctk.CTkLabel(bot, text=T("Intensity"), font=(FONT, 11), text_color=MUTED).pack(side="right", padx=(0, 6))
@@ -484,7 +530,45 @@ class MainWindow(ctk.CTkToplevel):
                         command=lambda v, g=g: self._set_game(g, drive=v[0])).pack(side="right", padx=(0, 14))
             ctk.CTkLabel(bot, text=T("Drive"), font=(FONT, 11), text_color=MUTED).pack(side="right", padx=(0, 6))
 
+    def _game_icon(self, g):
+        """The game's own icon as a CTkImage (None if its exe can't be found yet: it is retried each redraw)."""
+        if not hasattr(self, "_icon_imgs"):
+            self._icon_imgs = {}
+        if g["exe"] in self._icon_imgs:
+            return self._icon_imgs[g["exe"]]
+        miss = getattr(self, "_icon_miss", None)
+        if miss is None:
+            miss = self._icon_miss = {}
+        if time.time() - miss.get(g["exe"], 0) < 30:   # not found a moment ago: don't rescan every redraw
+            return None
+        path = icons.locate(g)
+        if not path:
+            miss[g["exe"]] = time.time()
+        img = icons.extract(path, 48) if path else None
+        if path and g.get("exe_path") != path:
+            g["exe_path"] = path
+            letter = os.path.splitdrive(path)[0][:1].upper()
+            if g.pop("auto_drive", False) and letter and letter != g["drive"]:
+                g["drive"] = letter
+                self.after(0, self._render_games)    # redraw so the Drive box shows the real drive
+            self._save_games()
+        out = ctk.CTkImage(light_image=img, dark_image=img, size=(28, 28)) if img is not None else None
+        if out is not None:
+            self._icon_imgs[g["exe"]] = out
+        return out
+
+    def _rename_game(self, g):
+        dlg = ctk.CTkInputDialog(text=T("Name to show for") + f" {g['exe']}:", title=T("Rename game"))
+        new = dlg.get_input()
+        if new is None:
+            return
+        new = new.strip()
+        self._set_game(g, name=new or g["exe"])
+        self._render_games()
+
     def _set_game(self, g, **kw):
+        if "drive" in kw:
+            g.pop("auto_drive", None)   # the user chose it: never override
         g.update(kw)
         self._save_games()
 
@@ -753,8 +837,9 @@ class MainWindow(ctk.CTkToplevel):
         # intensity
         i = card(body, T("Default intensity"), T("How hard to nudge the drive. Games can override this."))
         self.int_var = ctk.StringVar(value=pat_label(c["default_pattern"]))
-        segmented(i, [T(l) for _, l in PATTERN_LABELS], self.int_var,
-                  lambda _: self._int_changed()).pack(fill="x", padx=16, pady=(10, 6))
+        self.int_seg = segmented(i, [T(l) for _, l in PATTERN_LABELS], self.int_var,
+                                 lambda _: self._int_changed())
+        self.int_seg.pack(fill="x", padx=16, pady=(10, 6))
         self.int_desc = ctk.CTkLabel(i, text="", font=(FONT, 12), text_color=MUTED, anchor="w",
                                      justify="left", wraplength=500)
         self.int_desc.pack(fill="x", padx=16)
@@ -762,7 +847,8 @@ class MainWindow(ctk.CTkToplevel):
         switch_row(i, T("Smart intensity"),
                    T("Starts Light and steps up only while the drive keeps stalling, then steps back down "
                      "when it's calm. Ignores the choice above (a game's own setting still wins)."),
-                   self.v_adapt, lambda: self.app.apply({"adaptive": self.v_adapt.get()}))
+                   self.v_adapt, self._adapt_changed)
+        self._int_changed(save=False)
         adv = ctk.CTkFrame(i, fg_color="transparent")
         adv.pack(fill="x", padx=16, pady=(8, 4))
         ctk.CTkLabel(adv, text=T("Seconds between reads (advanced)"), font=(FONT, 12), text_color=MUTED).pack(side="left")
@@ -804,7 +890,8 @@ class MainWindow(ctk.CTkToplevel):
         o = card(body, T("Latency overlay"),
                  T("A small live readout in a screen corner while the drive is being kept awake (a game is "
                    "running, or Always on). It's a separate window that never touches the game, and shows "
-                   "over windowed and borderless games (not exclusive fullscreen)."))
+                   "over windowed and borderless games. It can't show over exclusive fullscreen (for example Battlefield 3): "
+                   "switch that game to borderless or windowed."))
         self.v_overlay = ctk.BooleanVar(value=c["overlay"])
         switch_row(o, T("Show overlay while the drive is kept awake"), None, self.v_overlay,
                    lambda: self.app.apply({"overlay": self.v_overlay.get()}))
@@ -828,14 +915,18 @@ class MainWindow(ctk.CTkToplevel):
 
         # network check
         n = card(body, T("Network check (optional)"),
-                 T("Adds ping and packet loss to the Lag check and lag marks. Type a server you play on, or any "
-                   "host such as 1.1.1.1. Diskuick only opens a normal connection to it, a few times a second "
-                   "during a check. Leave empty to keep it off."))
+                 T("Checks whether your internet could be behind the lag. Type 1.1.1.1 to check your "
+                   "general connection, or the address of a server you play on (the :port is optional and "
+                   "defaults to 443). During a Lag check (and when you mark a lag) Diskuick measures ping "
+                   "(how long the server takes to answer) and packet loss (answers that never arrive), so "
+                   "you can tell a network problem from a drive problem. Only a normal connection is "
+                   "opened, a few times a second, and nothing about you is sent. Leave empty to keep it "
+                   "off."))
         nrow = ctk.CTkFrame(n, fg_color="transparent")
         nrow.pack(fill="x", padx=16, pady=(8, 2))
         ctk.CTkLabel(nrow, text=T("Host"), font=(FONT, 13), text_color=TEXT).pack(side="left")
         self.net_entry = ctk.CTkEntry(nrow, width=240, height=32, fg_color=FIELD, border_color=BORDER,
-                                      corner_radius=8, placeholder_text="host[:port]")
+                                      corner_radius=8, placeholder_text=T("e.g. 1.1.1.1"))
         self.net_entry.pack(side="right")
         if c["net_host"]:
             self.net_entry.insert(0, c["net_host"])
@@ -871,7 +962,7 @@ class MainWindow(ctk.CTkToplevel):
                   ).grid(row=0, column=1, sticky="e", padx=(14, 0))
         ctk.CTkLabel(row, text=T("Language"), font=(FONT, 13), text_color=TEXT).grid(row=1, column=0, sticky="w", pady=(10, 0))
         self.lang_var = ctk.StringVar(value=LANGS[c["language"]])
-        option_menu(row, self.lang_var, list(LANGS.values()), width=160,
+        option_menu(row, self.lang_var, list(LANGS.values()), width=200,
                     command=lambda v: self.app.apply({"language": next(k for k, n in LANGS.items() if n == v)})
                     ).grid(row=1, column=1, sticky="e", padx=(14, 0), pady=(10, 0))
         row.columnconfigure(1, weight=1)
@@ -952,9 +1043,19 @@ class MainWindow(ctk.CTkToplevel):
 
     def _int_changed(self, save=True):
         p = pat_value(self.int_var.get()) or "random"
-        self.int_desc.configure(text=T(PATTERN_DESC[p]))
+        smart = self.v_adapt.get()
+        # Smart intensity picks the level itself, so the manual choice is greyed out while it's on
+        self.int_seg.configure(state="disabled" if smart else "normal")
+        self.int_desc.configure(text=T("Smart intensity is on: it picks the level for you. Turn it off to choose "
+                                       "one yourself.") if smart else T(PATTERN_DESC[p]))
         if save:
             self.app.apply({"default_pattern": p})
+
+    def _adapt_changed(self):
+        self.app.apply({"adaptive": self.v_adapt.get()})
+        self._int_changed(save=False)
+        if hasattr(self, "games_box"):
+            self._render_games()       # games on "no override" are labelled Smart/Default to match
 
     def _interval_changed(self):
         raw = self.interval.get().strip()

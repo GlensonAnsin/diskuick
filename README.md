@@ -35,7 +35,7 @@ so it never falls asleep right when a game needs data.
 
 Some SSDs, especially budget **DRAM-less SATA** models, drop into a low-power idle state and are slow to
 respond to the *first* reads after sitting idle. In a game that shows up as hitches while textures and
-levels stream in. Many people notice that running a disk scanner (like HD Tune's error scan) in the
+levels stream in. Many people notice that running a disk scanner in the
 background makes the stutter vanish, because the drive is kept continuously busy.
 
 **Diskuick does the same thing, but gently and only when needed:** a tiny, steady, read-only load on the
@@ -122,7 +122,7 @@ the cache). It never touches your game files, and it only looks at the *names* o
 |---|---|---|
 | **Light** (default) | Tiny random reads, ~10 per second | Almost always. Least overhead, try this first |
 | **Balanced** | Light sequential reads, ~20 per second | Light isn't quite enough on your drive |
-| **Heavy** | Continuous reads, like HD Tune | Last resort. Strongest, but the drive is always busy |
+| **Heavy** | Continuous, non-stop reads | Last resort. Strongest, but the drive is always busy |
 
 <br>
 
@@ -333,7 +333,7 @@ set `DISKUICK_SIGN_PFX` / `DISKUICK_SIGN_PASSWORD` before building (needs `signt
 - **Not code-signed**, so SmartScreen may warn (a certificate costs money).
 - **Game detection** picks the largest non-installer `.exe` in a game folder, which is a best guess; fix it in the Games tab if a game doesn't trigger.
 - **Lag check** measures the network only if you set a host, and the GPU only where Windows exposes its GPU counters (it doesn't read GPU temperature or clocks). The "other programs using the drive" list is partial without admin rights, because Windows hides some processes.
-- **Overlay** doesn't show over exclusive-fullscreen games.
+- **Overlay** doesn't show over exclusive-fullscreen games (for example Battlefield 3), because Windows draws nothing above them and Diskuick deliberately never injects into games. Switch the game to borderless or windowed (in BF3, press Alt+Enter) to see it.
 - **FPS counter** (optional) needs Diskuick to run as administrator, because Windows only lets administrators read frame events.
 - **Disk analyzer**: when Diskuick runs as administrator on an NTFS drive it reads the file table (MFT) directly, which also sees protected folders and counts hard-linked files once; any problem falls back to a normal multi-threaded folder walk. On a fast SSD both take roughly 10-20 seconds for ~1 million files; the file table pays off more on slower or busy drives. Without admin rights, protected folders are skipped. **Disk cleanup** only removes fixed categories (temp files, caches, crash dumps, Recycle Bin). The analyzer can move one chosen file or folder to the Recycle Bin (restorable); Windows folders, drive roots and user profiles are refused.
 - **Game mode** only asks windows to close, so programs that live in the tray or ignore the request stay open.

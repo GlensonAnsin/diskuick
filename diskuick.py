@@ -116,7 +116,7 @@ class Reader:
 PATTERNS = {
     "random": (lambda r: r.random_read(ALIGN), 0.10),      # tiny 4K random read ~10/s
     "seq": (lambda r: r.seq_read(128 * 1024), 0.05),       # 128K sequential ~20/s
-    "heavy": (lambda r: r.seq_read(MAX_READ), 0.0),        # continuous, HD Tune-like
+    "heavy": (lambda r: r.seq_read(MAX_READ), 0.0),        # continuous
 }
 PATTERN_RANK = {"random": 0, "seq": 1, "heavy": 2}
 # a single read slower than this counts as a "stall" (ms), per pattern
