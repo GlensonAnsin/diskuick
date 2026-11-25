@@ -84,8 +84,8 @@ FIL.update({
         "Maliliit na random na pagbasa, mga 10 kada segundo. Pinakamagaan - subukan ito muna.",
     "Light sequential reads, about 20 per second. For drives that need a bit more.":
         "Magagaan na sunud-sunod na pagbasa, mga 20 kada segundo. Para sa mga drive na kailangan ng kaunti pa.",
-    "Non-stop reads, like HD Tune. Strongest effect, but the drive is always busy.":
-        "Tuloy-tuloy na pagbasa, tulad ng HD Tune. Pinakamalakas ang epekto, pero laging abala ang drive.",
+    "Non-stop reads. Strongest effect, but the drive is always busy.":
+        "Tuloy-tuloy na pagbasa. Pinakamalakas ang epekto, pero laging abala ang drive.",
     "Seconds between reads (advanced)": "Segundo sa pagitan ng pagbasa (advanced)", "default": "default",
     "Enter a positive number, or leave empty for the default.": "Maglagay ng positibong numero, o iwanang blangko para sa default.",
     "Pause on battery": "I-pause kapag naka-baterya", "Laptops: don't keep the drive busy when unplugged.":
@@ -100,10 +100,19 @@ FIL.update({
         "Pangalan lang ng repository ang kinokontak; walang ipinapadalang impormasyon tungkol sa iyo.",
     "Update checks are off until a release repository is set.": "Naka-off ang pagtingin ng update hanggang may nakatakdang release repository.",
     "Open data folder": "Buksan ang folder ng datos", "Open stall log": "Buksan ang log ng pagtigil",
+    "Smart intensity is on: it picks the level for you. Turn it off to choose one yourself.":
+        "Naka-on ang Smart intensity: ito na ang pipili ng antas. I-off ito para ikaw ang pumili.",
+    "Smart": "Smart",
+    "Restart as administrator for a fast scan": "I-restart bilang administrator para sa mabilis na scan",
+    "Shows what is taking up space, biggest first. Nothing is changed or deleted here. Running as administrator reads the drive's file table directly (like WizTree), which takes seconds; otherwise it reads folders one by one, which can take a minute or two.":
+        "Ipinapakita kung ano ang pinakamalaki sa space. Walang binabago o binubura dito. Kapag naka-administrator, direktang binabasa ang file table ng drive (tulad ng WizTree) at ilang segundo lang; kung hindi, isa-isang binabasa ang mga folder, na maaaring umabot ng isa o dalawang minuto.",
+    "Took {s} s.": "Tumagal ng {s} s.",
+    # game rename
+    "Rename game": "Palitan ang pangalan ng laro", "Name to show for": "Pangalang ipapakita para sa",
     # overlay
     "Latency overlay": "Overlay ng latency",
-    "A small live readout in a screen corner while the drive is being kept awake (a game is running, or Always on). It's a separate window that never touches the game, and shows over windowed and borderless games (not exclusive fullscreen).":
-        "Maliit na live na pagbasa sa sulok ng screen habang pinapanatiling gising ang drive (may tumatakbong laro, o naka-Always on). Hiwalay itong window na hindi ginagalaw ang laro, at lumalabas sa windowed at borderless na laro (hindi sa exclusive fullscreen).",
+    "A small live readout in a screen corner while the drive is being kept awake (a game is running, or Always on). It's a separate window that never touches the game, and shows over windowed and borderless games. It can't show over exclusive fullscreen (for example Battlefield 3): switch that game to borderless or windowed.":
+        "Maliit na live na pagbasa sa sulok ng screen habang pinapanatiling gising ang drive (may tumatakbong laro, o naka-Always on). Hiwalay itong window na hindi ginagalaw ang laro, at lumalabas sa windowed at borderless na laro. Hindi ito lalabas sa exclusive fullscreen (halimbawa, Battlefield 3): ilipat ang laro sa borderless o windowed.",
     "Show overlay while a game runs": "Ipakita ang overlay habang may laro", "Position": "Posisyon", "Preview": "Pasilip",
     "Top left": "Kaliwang itaas", "Top right": "Kanang itaas", "Bottom left": "Kaliwang ibaba", "Bottom right": "Kanang ibaba",
     # updates
@@ -236,4 +245,11 @@ FIL.update({
     "Fast scan (NTFS file table).": "Mabilis na scan (NTFS file table).",
     "Run Diskuick as administrator for a much faster scan.":
         "Patakbuhin ang Diskuick bilang administrator para sa mas mabilis na scan.",
+})
+
+FIL.update({"Folders": "Mga Folder", "Free": "Libre"})
+FIL.update({
+    "Checks whether your internet could be behind the lag. Type 1.1.1.1 to check your general connection, or the address of a server you play on (the :port is optional and defaults to 443). During a Lag check (and when you mark a lag) Diskuick measures ping (how long the server takes to answer) and packet loss (answers that never arrive), so you can tell a network problem from a drive problem. Only a normal connection is opened, a few times a second, and nothing about you is sent. Leave empty to keep it off.":
+        "Sinusuri kung ang internet mo ang dahilan ng lag. I-type ang 1.1.1.1 para suriin ang pangkalahatang koneksyon mo, o ang address ng server na nilalaruan mo (opsyonal ang :port at 443 ang default). Habang may Lag check (at kapag nagmarka ka ng lag), sinusukat ng Diskuick ang ping (gaano katagal sumagot ang server) at packet loss (mga sagot na hindi dumarating), para malaman mo kung problema ng network o ng drive. Normal na koneksyon lang ang binubuksan, ilang beses kada segundo, at walang ipinapadala tungkol sa iyo. Iwanang walang laman para panatilihing naka-off.",
+    "e.g. 1.1.1.1": "hal. 1.1.1.1",
 })

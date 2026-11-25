@@ -9,7 +9,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, ROOT)
 
 import i18n
-import i18n_fil  # noqa: F401
+import i18n_langs  # noqa: F401  (registers every language)
 
 # strings that are intentionally not translated (identical in Filipino or brand/technical)
 SAME_OK = {"Dashboard", "Error", "Drive", "Default", "Keep-alive", "avg ms", "p95 ms", "max ms", "default",
@@ -20,7 +20,7 @@ EXTRA = ["Light", "Balanced", "Heavy", "Active", "Waiting", "Off", "Disabled", "
          "Waiting for a game to start", "Waiting for a game window to be in focus",
          "Tiny random reads, about 10 per second. Least overhead - try this first.",
          "Light sequential reads, about 20 per second. For drives that need a bit more.",
-         "Non-stop reads, like HD Tune. Strongest effect, but the drive is always busy."]
+         "Non-stop reads. Strongest effect, but the drive is always busy."]
 
 
 def ui_strings():
@@ -44,6 +44,11 @@ class I18nTests(unittest.TestCase):
     def test_all_strings_translated(self):
         missing = sorted(s for s in ui_strings() if s not in i18n.FIL and s not in SAME_OK)
         self.assertEqual(missing, [], f"{len(missing)} untranslated UI strings")
+
+    def test_every_language_translates_every_ui_string(self):
+        for code, table in i18n._TABLES.items():
+            missing = sorted(s for s in ui_strings() if s not in table and s not in SAME_OK)
+            self.assertEqual(missing, [], f"{code}: {len(missing)} untranslated UI strings")
 
     def test_placeholders_preserved(self):
         for en, fil in i18n.FIL.items():

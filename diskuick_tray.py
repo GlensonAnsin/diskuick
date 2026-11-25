@@ -1,5 +1,6 @@
 """Diskuick tray app: keeps drives awake while you game. Entry point of Diskuick.exe."""
 import ctypes
+import multiprocessing
 import os
 import queue
 import sys
@@ -20,7 +21,7 @@ import i18n
 import lagcheck
 import netcheck
 import sysmon
-import i18n_fil  # noqa: F401  (registers the Filipino strings)
+import i18n_langs  # noqa: F401  (registers all translations)
 import updater
 from app_ui import MainWindow
 from controller import Controller
@@ -144,7 +145,7 @@ class App:
                 self.gpu.stop()
             extra = ""
             if self.cfg["overlay_extra"] and active:
-                parts = [f"CPU {psutil.cpu_percent(interval=None):.0f}%"]
+                parts = [f"CPU {sysmon.CPU.read():.0f}%"]
                 if self.gpu.latest is not None:
                     parts.append(f"GPU {self.gpu.latest:.0f}%")
                 extra = "  ".join(parts)
@@ -360,4 +361,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()   # scan workers re-launch this exe: let them run as workers
     main()
