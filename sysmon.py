@@ -1,5 +1,6 @@
 """Live system readings used by the overlay, lag marks and the lag check: GPU load and disk users."""
 import csv
+import ctypes
 import io
 import os
 import subprocess
@@ -25,6 +26,45 @@ def gpu_once(timeout: float = 8.0) -> float | None:
     return vals[-1] if vals else None
 
 
+class _Utility:
+    """"% Processor Utility" (what Task Manager shows) via the PDH API. It differs from plain busy time because
+    it is scaled by the current clock speed. read() returns 0-100, or None if unavailable."""
+
+    PATH = r"\Processor Information(_Total)\% Processor Utility"
+
+    def __init__(self):
+        self.ok = False
+        self._q = ctypes.c_void_p()
+        self._c = ctypes.c_void_p()
+        try:
+            pdh = ctypes.windll.pdh
+            self._pdh = pdh
+            if pdh.PdhOpenQueryW(None, 0, ctypes.byref(self._q)) == 0 and \
+                    pdh.PdhAddEnglishCounterW(self._q, self.PATH, 0, ctypes.byref(self._c)) == 0:
+                pdh.PdhCollectQueryData(self._q)
+                self.ok = True
+        except (OSError, AttributeError):
+            pass
+
+    def read(self) -> float | None:
+        if not self.ok:
+            return None
+
+        class Val(ctypes.Structure):
+            _fields_ = [("status", ctypes.c_ulong), ("value", ctypes.c_double)]
+        try:
+            if self._pdh.PdhCollectQueryData(self._q) != 0:
+                return None
+            v, kind = Val(), ctypes.c_ulong()
+            # PDH_FMT_DOUBLE | PDH_FMT_NOCAP100: utility can exceed 100 while boosting, so cap it ourselves
+            if self._pdh.PdhGetFormattedCounterValue(self._c, 0x200 | 0x8000, ctypes.byref(kind), ctypes.byref(v)) != 0 \
+                    or v.status != 0:
+                return None
+            return max(0.0, min(100.0, v.value))
+        except (OSError, AttributeError):
+            return None
+
+
 class CpuMeter:
     """CPU load since the last reading, with private state.
 
@@ -39,17 +79,27 @@ class CpuMeter:
         self._base = psutil.cpu_times()
         self._t = time.monotonic()
         self._last = 0.0
+        self._pdh = _Utility()     # Task Manager's own figure; None-valued when Windows can't provide it
 
     def read(self) -> float:
         with self._lock:
-            now, cur = time.monotonic(), psutil.cpu_times()
+            now = time.monotonic()
             if now - self._t >= self.min_span:
-                total = sum(cur) - sum(self._base)
-                idle = (cur.idle + getattr(cur, "iowait", 0.0)) - (self._base.idle + getattr(self._base, "iowait", 0.0))
-                if total > 0:
-                    self._last = max(0.0, min(100.0, 100.0 * (total - idle) / total))
-                self._base, self._t = cur, now
-            return self._last
+                u = self._pdh.read()
+                if u is not None:
+                    self._last, self._t = u, now
+                    return u
+            return self._busy_time(now)
+
+    def _busy_time(self, now: float) -> float:
+        cur = psutil.cpu_times()
+        if now - self._t >= self.min_span:
+            total = sum(cur) - sum(self._base)
+            idle = (cur.idle + getattr(cur, "iowait", 0.0)) - (self._base.idle + getattr(self._base, "iowait", 0.0))
+            if total > 0:
+                self._last = max(0.0, min(100.0, 100.0 * (total - idle) / total))
+            self._base, self._t = cur, now
+        return self._last
 
 
 CPU = CpuMeter()
