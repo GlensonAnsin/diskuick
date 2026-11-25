@@ -498,10 +498,21 @@ class DiskTab:
 
         def work():
             freed = removed = 0
-            for cat in picked:
-                b, n = cleanup.clean(cat)
-                freed, removed = freed + b, removed + n
-            self.win.post(lambda: self._clean_done(freed, removed))
+            try:
+                for i, cat in enumerate(picked, 1):
+                    head = f"{T('Cleaning...')} {T(cat.title)} ({i}/{len(picked)})"
+                    self.win.post(lambda h=head: self.clean_status.configure(text=h))
+
+                    def prog(f, n, h=head, base=(freed, removed)):
+                        self.win.post(lambda: self.clean_status.configure(
+                            text=f"{h} - {diskscan.fmt_size(base[0] + f)}"))
+                    try:
+                        b, n = cleanup.clean(cat, progress=prog)
+                    except Exception:
+                        b = n = 0        # one failing category must not leave the screen stuck
+                    freed, removed = freed + b, removed + n
+            finally:
+                self.win.post(lambda: self._clean_done(freed, removed))
 
         threading.Thread(target=work, daemon=True).start()
 

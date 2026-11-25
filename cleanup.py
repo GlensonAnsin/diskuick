@@ -144,7 +144,7 @@ def _remove_file(path: str) -> int | None:
 
 
 def clean_dir(root: str, min_age: int = 0, cancel: threading.Event | None = None,
-              now: float | None = None) -> tuple[int, int]:
+              now: float | None = None, progress=None) -> tuple[int, int]:
     """Delete everything inside `root` (never `root` itself, never through a junction/symlink).
     Returns (bytes freed, files removed). Files that are in use are skipped silently."""
     now = time.time() if now is None else now
@@ -172,6 +172,8 @@ def clean_dir(root: str, min_age: int = 0, cancel: threading.Event | None = None
                         if got is not None:
                             freed += got
                             removed += 1
+                        if progress is not None and removed % 200 == 0:
+                            progress(freed, removed)
                 except OSError:
                     continue
     for d in sorted(dirs, key=len, reverse=True):   # empty folders, deepest first; non-empty ones just fail
@@ -182,24 +184,31 @@ def clean_dir(root: str, min_age: int = 0, cancel: threading.Event | None = None
     return freed, removed
 
 
-def _empty_recycle_bin() -> tuple[int, int]:
+def _empty_recycle_bin(timeout: float = 90.0) -> tuple[int, int]:
     size, items = _recycle_info()
-    try:
-        # SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND
-        ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 0x7)
-    except (OSError, AttributeError):
-        return 0, 0
-    return size, items
+
+    def work():
+        try:
+            ctypes.windll.ole32.CoInitialize(None)    # the shell API expects COM on its thread
+            # SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND
+            ctypes.windll.shell32.SHEmptyRecycleBinW(None, None, 0x7)
+        except (OSError, AttributeError):
+            pass
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(timeout)          # never let a stuck shell call freeze the cleanup
+    return (0, 0) if t.is_alive() else (size, items)
 
 
-def clean(cat: Category, cancel: threading.Event | None = None) -> tuple[int, int]:
+def clean(cat: Category, cancel: threading.Event | None = None, progress=None) -> tuple[int, int]:
     """Clean one category; returns (bytes freed, files removed)."""
     if cat.recycle_bin:
         return _empty_recycle_bin()
     freed = removed = 0
     for d in cat.dirs:
         if d and os.path.isdir(d):
-            b, n = clean_dir(d, cat.min_age, cancel)
+            b, n = clean_dir(d, cat.min_age, cancel, progress=progress)
             freed, removed = freed + b, removed + n
     for pattern in cat.globs:
         for p in glob.glob(pattern):
