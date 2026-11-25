@@ -8,13 +8,8 @@ import fps
 
 
 class FpsTests(unittest.TestCase):
-    def test_counts_frames_in_last_second(self):
-        arrivals = [98.0, 99.2, 99.3, 99.5, 99.9, 100.0]
-        self.assertEqual(fps.fps_from_arrivals(arrivals, 100.0), 5.0)
-
-    def test_no_recent_frames(self):
-        self.assertIsNone(fps.fps_from_arrivals([90.0], 100.0))
-        self.assertIsNone(fps.fps_from_arrivals([], 100.0))
+    def test_slow_frames_give_low_fps(self):
+        self.assertAlmostEqual(fps.fps_from_frames([(1.0, 47.6)] * 30, 1.0), 21.0, places=1)
 
     def test_frame_column_names(self):
         self.assertEqual(fps.frame_column(["Application", "ProcessID", "FrameTime"]), 2)
@@ -27,9 +22,14 @@ class FpsTests(unittest.TestCase):
 
     def test_monitor_goes_quiet_when_frames_stop(self):
         m = fps.FpsMonitor(exe_path="x")
-        m.frames.extend([100.0, 100.5, 101.0])
-        self.assertEqual(m.fps(now=101.2), 2.0)  # 100.5 and 101.0 fall inside the last second
-        self.assertIsNone(m.fps(now=110.0))
+        m.frames.extend([(100.0, 50.0)] * 20)   # 20 frames of 50 ms = 1 s -> 20 FPS, however they arrived
+        self.assertAlmostEqual(m.fps(now=101.0), 20.0)
+        self.assertIsNone(m.fps(now=120.0))
+
+    def test_fps_uses_frame_times_not_arrival(self):
+        burst = [(100.0, 16.67)] * 60            # all 60 lines delivered at the same instant
+        self.assertAlmostEqual(fps.fps_from_frames(burst, 100.0), 60.0, places=1)
+        self.assertIsNone(fps.fps_from_frames([], 100.0))
 
     def test_unavailable_without_presentmon(self):
         m = fps.FpsMonitor(exe_path="")

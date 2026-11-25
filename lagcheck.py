@@ -47,11 +47,11 @@ _GPU_RE = re.compile(r"GPU Engine\(pid_\d+_(luid_\w+?)_phys_\d+_(eng_\d+)_engtyp
 
 
 def gpu_columns(header: list[str]) -> dict[int, tuple[str, str]]:
-    """typeperf header row -> {column: (gpu id, engine id)} for the 3D/Compute engines only."""
+    """typeperf header row -> {column: (gpu id, engine id)} for every engine (like Task Manager)."""
     cols = {}
     for i, name in enumerate(header):
         m = _GPU_RE.search(name)
-        if m and (m.group(3).startswith("3D") or m.group(3).startswith("Compute")):
+        if m:
             cols[i] = (m.group(1), m.group(2))
     return cols
 
@@ -80,7 +80,7 @@ def parse_gpu(text: str) -> list[float] | None:
     """typeperf CSV of the GPU Engine counters -> per-second load (0-100) of the busiest GPU.
 
     Instances look like pid_<pid>_luid_<luid>_phys_<n>_eng_<i>_engtype_<type>. Load is summed over
-    processes per engine and the busiest 3D/Compute engine counts as the GPU's load (like Task
+    processes per engine and the busiest engine counts as the GPU's load (like Task
     Manager). With several GPUs we report the one that worked hardest.
     """
     rows = [r for r in csv.reader(io.StringIO(text)) if r and len(r) > 1]

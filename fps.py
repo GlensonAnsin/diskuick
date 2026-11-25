@@ -18,7 +18,7 @@ import time
 NO_WINDOW = 0x08000000
 FRAME_COLUMNS = ("msbetweenpresents", "frametime")   # PresentMon 1.x / 2.x name for the frame time (ms)
 WINDOW = 1.0                                         # seconds of frames averaged into one reading
-STALE = 2.0                                          # no frames for this long = not rendering (menu, alt-tab)
+STALE = 6.0                                          # no frames for this long = not rendering (menu, alt-tab)
 
 
 def find_presentmon() -> str | None:
@@ -40,12 +40,23 @@ def frame_column(header: list[str]) -> int | None:
     return None
 
 
-def fps_from_arrivals(arrivals, now: float) -> float | None:
-    """Frames per second from the times (seconds) frames were reported, looking at the last WINDOW s."""
-    recent = [t for t in arrivals if t >= now - WINDOW]
-    if not recent:
+def fps_from_frames(frames, now: float) -> float | None:
+    """FPS from (arrival time, frame time in ms) pairs, newest last.
+
+    Uses the frame times PresentMon reports (not when the lines reached us: a piped stdout is delivered
+    in bursts). Takes the newest frames adding up to about WINDOW seconds of rendering.
+    """
+    n, total = 0, 0.0
+    for arrival, ms in reversed(frames):
+        if ms <= 0:
+            continue
+        n += 1
+        total += ms
+        if total >= WINDOW * 1000:
+            break
+    if n == 0 or total <= 0:
         return None
-    return len(recent) / WINDOW
+    return n * 1000.0 / total
 
 
 def format_fps(fps: float | None) -> str:
@@ -69,9 +80,9 @@ class FpsMonitor:
 
     def fps(self, now: float | None = None) -> float | None:
         now = time.monotonic() if now is None else now
-        if not self.frames or now - self.frames[-1] > STALE:
+        if not self.frames or now - self.frames[-1][0] > STALE:
             return None
-        return fps_from_arrivals(list(self.frames), now)
+        return fps_from_frames(list(self.frames), now)
 
     def track(self, exe: str | None):
         """Measure this game's exe (e.g. "game.exe"); None stops measuring."""
@@ -119,7 +130,11 @@ class FpsMonitor:
             if col is None:
                 col = frame_column(row)
                 continue
-            self.frames.append(time.monotonic())
+            try:
+                ms = float(row[col])
+            except (ValueError, IndexError):
+                continue
+            self.frames.append((time.monotonic(), ms))
         proc.kill()
         if self.target == exe and col is None:
             self.error = "PresentMon produced no output (it needs administrator rights)"

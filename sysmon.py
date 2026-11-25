@@ -25,6 +25,36 @@ def gpu_once(timeout: float = 8.0) -> float | None:
     return vals[-1] if vals else None
 
 
+class CpuMeter:
+    """CPU load since the last reading, with private state.
+
+    psutil.cpu_percent(interval=None) shares one global "last reading" across the whole program, so every
+    caller shrinks everyone else's measuring window (giving tiny, jumpy numbers that don't match Task
+    Manager). This keeps its own baseline and only moves it once at least `min_span` seconds have passed.
+    """
+
+    def __init__(self, min_span: float = 1.0):
+        self.min_span = min_span
+        self._lock = threading.Lock()
+        self._base = psutil.cpu_times()
+        self._t = time.monotonic()
+        self._last = 0.0
+
+    def read(self) -> float:
+        with self._lock:
+            now, cur = time.monotonic(), psutil.cpu_times()
+            if now - self._t >= self.min_span:
+                total = sum(cur) - sum(self._base)
+                idle = (cur.idle + getattr(cur, "iowait", 0.0)) - (self._base.idle + getattr(self._base, "iowait", 0.0))
+                if total > 0:
+                    self._last = max(0.0, min(100.0, 100.0 * (total - idle) / total))
+                self._base, self._t = cur, now
+            return self._last
+
+
+CPU = CpuMeter()
+
+
 class GpuMonitor:
     """Keeps one `typeperf` running and exposes the latest GPU load.
 

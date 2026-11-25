@@ -232,9 +232,9 @@ class LagcheckTests(unittest.TestCase):
                '"\\\\PC\\GPU Engine(pid_1_luid_0x0_0xB_phys_0_eng_0_engtype_3D)\\Utilization Percentage"\n'
                '"x","60","30","99","5"\n"x","80","40","99","5"\n')
 
-    def test_parse_gpu_sums_processes_ignores_video_picks_busiest_gpu(self):
-        # GPU A: 60+30=90, 80+40=120 -> capped at 100. VideoDecode ignored. GPU B only 5.
-        self.assertEqual(lagcheck.parse_gpu(self.GPU_CSV), [90.0, 100.0])
+    def test_parse_gpu_sums_processes_busiest_engine_and_gpu(self):
+        # GPU A: 60+30=90, 80+40=120 -> capped at 100. VideoDecode counts too (like Task Manager): 99. GPU B only 5.
+        self.assertEqual(lagcheck.parse_gpu(self.GPU_CSV), [99.0, 100.0])
         self.assertIsNone(lagcheck.parse_gpu(""))
         self.assertIsNone(lagcheck.parse_gpu('"t","\\\\PC\\Processor(_Total)\\% Processor Time"\n"x","1"\n'))
 

@@ -4,6 +4,7 @@ import threading
 import time
 
 import psutil
+import sysmon
 
 import alerts as alerts_mod
 import diskuick as dk
@@ -193,7 +194,7 @@ class Controller(threading.Thread):
 
     def _track_sessions(self, games: list):
         now = time.time()
-        cpu = psutil.cpu_percent(interval=None)
+        cpu = sysmon.CPU.read()
         ram = psutil.virtual_memory().percent
         gpu = self.gpu_source()
         for d in self.active_drives():
